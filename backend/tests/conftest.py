@@ -154,3 +154,56 @@ async def client(db_session):
     login_limiter.reset()
     register_limiter.reset()
     api_key_save_limiter.reset()
+
+
+# --- Document fixtures for parser tests: generated in code, no binary files committed. ---
+
+
+@pytest.fixture
+def make_pdf():
+    """`make_pdf(pages, image_only=False) -> bytes`: one text page per item of `pages`
+    (lines separated by "\\n"). `image_only=True` renders each page to an image and keeps
+    only the image, like a scanned document."""
+    import pymupdf
+
+    def build(pages: list[str], image_only: bool = False) -> bytes:
+        doc = pymupdf.open()
+        for content in pages:
+            page = doc.new_page()
+            html = "".join(f"<p>{line}</p>" for line in content.split("\n"))
+            page.insert_htmlbox(pymupdf.Rect(50, 40, 545, 800), html)
+        if not image_only:
+            return doc.tobytes()
+        scanned = pymupdf.open()
+        for page in doc:
+            pix = page.get_pixmap(dpi=72)
+            new = scanned.new_page(width=page.rect.width, height=page.rect.height)
+            new.insert_image(new.rect, pixmap=pix)
+        return scanned.tobytes()
+
+    return build
+
+
+@pytest.fixture
+def make_docx():
+    """`make_docx(paragraphs, header_table=None) -> bytes`. `header_table` is a list of rows
+    (list of cell texts) placed before the paragraphs, like the issuer/number header of a
+    legal document."""
+    import io
+
+    import docx
+
+    def build(paragraphs: list[str], header_table: list[list[str]] | None = None) -> bytes:
+        document = docx.Document()
+        if header_table:
+            table = document.add_table(rows=len(header_table), cols=len(header_table[0]))
+            for row, cells in zip(table.rows, header_table, strict=True):
+                for cell, value in zip(row.cells, cells, strict=True):
+                    cell.text = value
+        for paragraph in paragraphs:
+            document.add_paragraph(paragraph)
+        buffer = io.BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    return build
