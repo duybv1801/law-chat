@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.rate_limit import API_KEY_SAVE_MAX_ATTEMPTS
 from app.core.crypto import decrypt_secret
-from app.db.models import User, UserApiKey, UserSettings
+from app.db.models import PROVIDER_LABELS, PROVIDERS, User, UserApiKey, UserSettings
 from app.llm import client as llm_client
 from app.llm.errors import LLMError
+from app.llm.registry import ModelRegistry, registry_dep
 from app.settings.schemas import ApiKeyIn
 
 PASSWORD = "mat-khau-123"
@@ -242,19 +243,19 @@ async def test_delete_key(client: httpx.AsyncClient, validator_calls) -> None:
 
 
 async def test_delete_key_clears_default_on_that_provider(
-    client: httpx.AsyncClient, db_session: AsyncSession, validator_calls
+    client: httpx.AsyncClient, db_session: AsyncSession, test_registry, validator_calls
 ) -> None:
     user_id = await _login(client)
     await _put_key(client, "openai", FAKE_KEY)
     await _put_key(client, "gemini", OTHER_KEY)
     db_session.add(
-        UserSettings(user_id=user_id, default_provider="openai", default_model_id="some-model")
+        UserSettings(user_id=user_id, default_provider="openai", default_model_id="openai-main")
     )
     await db_session.flush()
 
     await client.delete("/api/settings/api-keys/gemini")
     body = (await client.get("/api/settings")).json()
-    assert (body["default_provider"], body["default_model_id"]) == ("openai", "some-model")
+    assert (body["default_provider"], body["default_model_id"]) == ("openai", "openai-main")
 
     await client.delete("/api/settings/api-keys/openai")
     body = (await client.get("/api/settings")).json()
@@ -305,3 +306,215 @@ async def test_key_never_logged(
         assert secret not in caplog.text
         for record in caplog.records:
             assert secret not in repr(record.args)
+
+
+# --- models & default model (T06) ---------------------------------------------------------
+
+TEST_REGISTRY = ModelRegistry.model_validate(
+    {
+        "models": [
+            {
+                "id": "openai-main",
+                "provider": "openai",
+                "litellm_model": "openai/secret-name",
+                "label": "ChatGPT",
+                "max_context_tokens": 128000,
+            },
+            {
+                "id": "anthropic-main",
+                "provider": "anthropic",
+                "litellm_model": "anthropic/secret-name",
+                "label": "Claude",
+                "max_context_tokens": 200000,
+            },
+            {
+                "id": "openai-old",
+                "provider": "openai",
+                "litellm_model": "openai/old-name",
+                "label": "Old",
+                "max_context_tokens": 8000,
+                "enabled": False,
+            },
+        ],
+        "validation_model": {
+            "openai": "openai/c",
+            "anthropic": "anthropic/c",
+            "gemini": "gemini/c",
+        },
+    }
+)
+
+
+@pytest.fixture
+def test_registry(client: httpx.AsyncClient):
+    from app.main import app
+
+    app.dependency_overrides[registry_dep] = lambda: TEST_REGISTRY
+    yield TEST_REGISTRY
+    app.dependency_overrides.pop(registry_dep, None)
+
+
+async def _put_settings(client: httpx.AsyncClient, model_id: str | None) -> httpx.Response:
+    return await client.put("/api/settings", json={"default_model_id": model_id})
+
+
+async def test_models_requires_login(client: httpx.AsyncClient, test_registry) -> None:
+    assert (await client.get("/api/models")).status_code == 401
+    assert (await _put_settings(client, "openai-main")).status_code == 401
+
+
+async def test_list_models_only_enabled_without_litellm_name(
+    client: httpx.AsyncClient, test_registry
+) -> None:
+    await _login(client)
+    response = await client.get("/api/models")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "openai-main", "provider": "openai", "label": "ChatGPT"},
+        {"id": "anthropic-main", "provider": "anthropic", "label": "Claude"},
+    ]
+    assert "secret-name" not in response.text
+
+
+async def test_list_models_from_repo_yaml(client: httpx.AsyncClient) -> None:
+    await _login(client)
+    response = await client.get("/api/models")
+    assert response.status_code == 200
+    assert {m["provider"] for m in response.json()} == {"openai", "anthropic", "gemini"}
+    assert "litellm" not in response.text and "<model-id>" not in response.text
+
+
+async def test_put_settings_sets_model_and_provider(
+    client: httpx.AsyncClient, db_session: AsyncSession, test_registry, validator_calls
+) -> None:
+    user_id = await _login(client)
+    await _put_key(client, "openai", FAKE_KEY)
+    await _put_key(client, "anthropic", OTHER_KEY)
+
+    response = await _put_settings(client, "openai-main")
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["default_provider"], body["default_model_id"]) == ("openai", "openai-main")
+    assert [k["provider"] for k in body["api_keys"]] == ["anthropic", "openai"]
+
+    # Switching updates the same row; provider follows the model.
+    response = await _put_settings(client, "anthropic-main")
+    assert response.status_code == 200
+    assert response.json()["default_provider"] == "anthropic"
+    rows = (
+        await db_session.scalars(select(UserSettings).where(UserSettings.user_id == user_id))
+    ).all()
+    assert [(r.default_provider, r.default_model_id) for r in rows] == [
+        ("anthropic", "anthropic-main")
+    ]
+    assert (await client.get("/api/settings")).json()["default_model_id"] == "anthropic-main"
+
+
+async def test_put_settings_null_clears_default(
+    client: httpx.AsyncClient, test_registry, validator_calls
+) -> None:
+    await _login(client)
+    # Clearing works even before any settings row exists.
+    response = await _put_settings(client, None)
+    assert response.status_code == 200
+    assert (response.json()["default_provider"], response.json()["default_model_id"]) == (
+        None,
+        None,
+    )
+
+    await _put_key(client, "openai", FAKE_KEY)
+    await _put_settings(client, "openai-main")
+    body = (await _put_settings(client, None)).json()
+    assert (body["default_provider"], body["default_model_id"]) == (None, None)
+
+
+async def test_put_settings_requires_key_for_provider(
+    client: httpx.AsyncClient, test_registry, validator_calls
+) -> None:
+    await _login(client)
+    await _put_key(client, "openai", FAKE_KEY)
+    await _put_settings(client, "openai-main")
+
+    response = await _put_settings(client, "anthropic-main")
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "no_api_key"
+    assert "Anthropic" in response.json()["error"]["message"]
+    # Previous default is kept.
+    assert (await client.get("/api/settings")).json()["default_model_id"] == "openai-main"
+
+
+async def test_put_settings_key_of_other_user_does_not_count(
+    client: httpx.AsyncClient, test_registry, validator_calls
+) -> None:
+    await _login(client, "a@example.com")
+    await _put_key(client, "openai", FAKE_KEY)
+    client.cookies.clear()
+
+    await _login(client, "b@example.com")
+    response = await _put_settings(client, "openai-main")
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "no_api_key"
+
+
+@pytest.mark.parametrize("model_id", ["openai-old", "does-not-exist", "openai/secret-name"])
+async def test_put_settings_rejects_unknown_or_disabled_model(
+    client: httpx.AsyncClient, test_registry, validator_calls, model_id: str
+) -> None:
+    await _login(client)
+    await _put_key(client, "openai", FAKE_KEY)
+    response = await _put_settings(client, model_id)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unknown_model"
+    assert (await client.get("/api/settings")).json()["default_model_id"] is None
+
+
+@pytest.mark.parametrize("payload", [{}, {"default_model_id": 5}, {"default_model_id": "x" * 65}])
+async def test_put_settings_validation_errors(
+    client: httpx.AsyncClient, test_registry, payload: dict
+) -> None:
+    await _login(client)
+    response = await client.put("/api/settings", json=payload)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_deleting_key_after_put_settings_clears_default(
+    client: httpx.AsyncClient, test_registry, validator_calls
+) -> None:
+    await _login(client)
+    await _put_key(client, "openai", FAKE_KEY)
+    await _put_settings(client, "openai-main")
+    await client.delete("/api/settings/api-keys/openai")
+    body = (await client.get("/api/settings")).json()
+    assert (body["default_provider"], body["default_model_id"]) == (None, None)
+
+
+async def test_default_model_disabled_later_reads_as_null(
+    client: httpx.AsyncClient, db_session: AsyncSession, test_registry, validator_calls
+) -> None:
+    from app.main import app
+
+    user_id = await _login(client)
+    await _put_key(client, "openai", FAKE_KEY)
+    await _put_settings(client, "openai-main")
+
+    disabled = TEST_REGISTRY.model_copy(
+        update={
+            "models": [
+                m.model_copy(update={"enabled": m.id != "openai-main"})
+                for m in TEST_REGISTRY.models
+            ]
+        }
+    )
+    app.dependency_overrides[registry_dep] = lambda: disabled
+    body = (await client.get("/api/settings")).json()
+    assert (body["default_provider"], body["default_model_id"]) == (None, None)
+    # The stored row is untouched: re-enabling the model brings the default back.
+    row = await db_session.get(UserSettings, user_id)
+    assert row.default_model_id == "openai-main"
+    app.dependency_overrides[registry_dep] = lambda: TEST_REGISTRY
+    assert (await client.get("/api/settings")).json()["default_model_id"] == "openai-main"
+
+
+def test_provider_labels_cover_every_provider() -> None:
+    assert set(PROVIDER_LABELS) == set(PROVIDERS)

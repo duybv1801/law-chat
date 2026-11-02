@@ -1,0 +1,31 @@
+# Model registry (docs/05-rag-chat.md, "Model registry").
+# Fill in the exact model strings from each provider's and LiteLLM's docs at deploy time.
+# Never hardcode model names in code.
+#
+# - id: stable identifier stored in user_settings.default_model_id. Renaming it drops users' default.
+# - litellm_model: must start with "<provider>/". Never returned to the frontend.
+# - enabled: false hides the model from GET /api/models without deleting it from this file.
+# The backend validates this file at startup and refuses to start with a clear error if it is wrong.
+models:
+  - id: openai-main
+    provider: openai
+    litellm_model: "openai/<model-id>"
+    label: "ChatGPT (GPT-5.5)"
+    max_context_tokens: 128000
+    enabled: true
+  - id: anthropic-main
+    provider: anthropic
+    litellm_model: "anthropic/<model-id>"
+    label: "Claude"
+    max_context_tokens: 200000
+    enabled: true
+  - id: gemini-main
+    provider: gemini
+    litellm_model: "gemini/<model-id>"
+    label: "Gemini"
+    max_context_tokens: 128000
+    enabled: true
+validation_model:          # cheap model used to check a key when the user saves it
+  openai: "openai/<cheap-model-id>"
+  anthropic: "anthropic/<cheap-model-id>"
+  gemini: "gemini/<cheap-model-id>"

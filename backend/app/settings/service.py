@@ -10,24 +10,78 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import encrypt_secret
 from app.core.errors import AppError
-from app.db.models import Provider, UserApiKey, UserSettings
+from app.db.models import PROVIDER_LABELS, Provider, UserApiKey, UserSettings
 from app.llm import client as llm_client
 from app.llm.errors import USER_MESSAGES, LLMError, LLMErrorCode
+from app.llm.registry import ModelRegistry
 from app.settings.schemas import ApiKeyOut, SettingsOut
 
 logger = logging.getLogger(__name__)
 
 
-async def get_settings(session: AsyncSession, user_id: uuid.UUID) -> SettingsOut:
+async def get_settings(
+    session: AsyncSession, user_id: uuid.UUID, registry: ModelRegistry
+) -> SettingsOut:
+    """A saved default whose model was later disabled or removed from models.yaml reads as null."""
     user_settings = await session.get(UserSettings, user_id)
     keys = await session.scalars(
         select(UserApiKey).where(UserApiKey.user_id == user_id).order_by(UserApiKey.provider)
     )
+    model_id = user_settings.default_model_id if user_settings else None
+    if model_id is not None and registry.get_enabled(model_id) is None:
+        model_id = None
     return SettingsOut(
-        default_provider=user_settings.default_provider if user_settings else None,
-        default_model_id=user_settings.default_model_id if user_settings else None,
+        default_provider=user_settings.default_provider if model_id else None,
+        default_model_id=model_id,
         api_keys=[ApiKeyOut.model_validate(key) for key in keys],
     )
+
+
+async def set_default_model(
+    session: AsyncSession, user_id: uuid.UUID, model_id: str | None, registry: ModelRegistry
+) -> SettingsOut:
+    """Set (or clear, with None) the default model; `default_provider` follows the model.
+
+    Only enabled models of a provider the user already has a key for can be chosen.
+    """
+    provider: Provider | None = None
+    if model_id is not None:
+        spec = registry.get_enabled(model_id)
+        if spec is None:
+            raise AppError(
+                status.HTTP_400_BAD_REQUEST,
+                "unknown_model",
+                "Model không tồn tại hoặc đã bị tắt.",
+            )
+        # FOR UPDATE: a concurrent delete_api_key waits for our commit (and then clears this
+        # default), or commits first and we see no key; the default never outlives the key.
+        has_key = await session.scalar(
+            select(UserApiKey.id)
+            .where(UserApiKey.user_id == user_id, UserApiKey.provider == spec.provider)
+            .with_for_update()
+        )
+        if has_key is None:
+            raise AppError(
+                status.HTTP_400_BAD_REQUEST,
+                "no_api_key",
+                f"Bạn chưa nhập API key {PROVIDER_LABELS[spec.provider]}. "
+                "Vào Cài đặt để thêm key trước khi chọn model này.",
+            )
+        provider = spec.provider
+
+    values = {"default_provider": provider, "default_model_id": model_id}
+    await session.execute(
+        insert(UserSettings)
+        .values(user_id=user_id, **values)
+        .on_conflict_do_update(
+            index_elements=[UserSettings.user_id],
+            # Core UPDATE: set updated_at by hand.
+            set_={**values, "updated_at": func.clock_timestamp()},
+        )
+    )
+    await session.commit()
+    logger.info("default model set: user=%s model=%s", user_id, model_id)
+    return await get_settings(session, user_id, registry)
 
 
 # invalid_key is the user's fault; a throttled provider is temporary; anything else is an
