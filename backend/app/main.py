@@ -12,6 +12,9 @@ from fastapi import FastAPI, Request, Response, status
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy import text
 
+from app.auth.router import router as auth_router
+from app.core.csrf import CsrfHeaderMiddleware
+from app.core.errors import register_error_handlers
 from app.db.session import engine
 
 HEALTH_CHECK_TIMEOUT_S = 3.0
@@ -34,6 +37,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Law Chatbot API", lifespan=lifespan)
+app.add_middleware(CsrfHeaderMiddleware)
+register_error_handlers(app)
+app.include_router(auth_router, prefix="/api")
 
 
 async def check_postgres() -> None:
