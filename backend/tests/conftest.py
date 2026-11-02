@@ -121,3 +121,34 @@ async def db_session(migrated_db):
             await session.close()
             await transaction.rollback()
     await engine.dispose()
+
+
+@pytest.fixture
+async def client(db_session):
+    """HTTP client for the app, sharing `db_session` (so everything is rolled back).
+
+    httpx `ASGITransport` runs the app in the test's event loop, which the asyncpg
+    connection requires (Starlette's TestClient would use another thread / loop).
+    """
+    import httpx
+
+    from app.auth.rate_limit import login_limiter, register_limiter
+    from app.db.session import get_session
+    from app.main import app
+
+    async def override_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_session
+    login_limiter.reset()
+    register_limiter.reset()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"X-Requested-With": "fetch"},
+    ) as http:
+        yield http
+    app.dependency_overrides.pop(get_session, None)
+    login_limiter.reset()
+    register_limiter.reset()
