@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal, get_args
 
 from sqlalchemy import (
     ARRAY,
@@ -25,7 +25,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Allowed values for text columns guarded by CHECK constraints.
 USER_ROLES = ("user", "admin")
-PROVIDERS = ("openai", "anthropic", "gemini")
+Provider = Literal["openai", "anthropic", "gemini"]
+PROVIDERS: tuple[Provider, ...] = get_args(Provider)
 DOCUMENT_SOURCES = ("vbpl", "user_upload")
 DOCUMENT_STATUSES = (
     "con_hieu_luc",

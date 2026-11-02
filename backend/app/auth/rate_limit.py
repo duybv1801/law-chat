@@ -1,13 +1,21 @@
 """In-memory sliding-window rate limiter (single backend process, per docs/06-api.md)."""
 
+import math
 import time
 from collections import deque
 from collections.abc import Callable
+
+from fastapi import status
+
+from app.core.errors import AppError
 
 LOGIN_MAX_ATTEMPTS = 10
 LOGIN_WINDOW_S = 15 * 60
 REGISTER_MAX_ATTEMPTS = 5
 REGISTER_WINDOW_S = 60 * 60
+# Saving an API key calls the provider (T17): stop using the server as a key-checking oracle.
+API_KEY_SAVE_MAX_ATTEMPTS = 20
+API_KEY_SAVE_WINDOW_S = 60 * 60
 
 
 class SlidingWindowLimiter:
@@ -66,3 +74,20 @@ class SlidingWindowLimiter:
 # never lock others out.
 login_limiter = SlidingWindowLimiter(LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_S)
 register_limiter = SlidingWindowLimiter(REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW_S)
+api_key_save_limiter = SlidingWindowLimiter(API_KEY_SAVE_MAX_ATTEMPTS, API_KEY_SAVE_WINDOW_S)
+
+
+def too_many_requests(retry_after: float) -> AppError:
+    return AppError(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "too_many_requests",
+        "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.",
+        headers={"Retry-After": str(math.ceil(retry_after))},
+    )
+
+
+def enforce(limiter: SlidingWindowLimiter, key: str, *, record: bool) -> None:
+    """Raise 429 if `key` is over the limit; `record=True` also counts this attempt."""
+    retry_after = limiter.hit(key) if record else limiter.retry_after(key)
+    if retry_after is not None:
+        raise too_many_requests(retry_after)

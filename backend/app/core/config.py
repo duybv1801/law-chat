@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.core.crypto import build_fernet
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_DIR.parent
@@ -68,14 +69,7 @@ class Settings(BaseSettings):
     @field_validator("app_encryption_keys")
     @classmethod
     def _check_fernet_keys(cls, value: list[SecretStr]) -> list[SecretStr]:
-        for index, key in enumerate(value):
-            try:
-                Fernet(key.get_secret_value())
-            except ValueError as exc:
-                # Never echo the key itself, only its position.
-                raise ValueError(
-                    f"APP_ENCRYPTION_KEYS entry #{index + 1} is not a valid Fernet key"
-                ) from exc
+        build_fernet(value)  # the error names the key's position, never the key itself
         return value
 
     @field_validator("upload_dir", "hf_home")

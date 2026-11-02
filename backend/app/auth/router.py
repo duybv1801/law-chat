@@ -1,12 +1,11 @@
 """Auth API routes: register, login, refresh, logout, me."""
 
-import math
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Request, Response, status
 
 from app.auth import service
-from app.auth.rate_limit import SlidingWindowLimiter, login_limiter, register_limiter
+from app.auth.rate_limit import enforce, login_limiter, register_limiter
 from app.auth.schemas import LoginRequest, RegisterRequest, UserOut
 from app.core.config import settings
 from app.core.deps import (
@@ -52,26 +51,11 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _too_many_requests(retry_after: float) -> AppError:
-    return AppError(
-        status.HTTP_429_TOO_MANY_REQUESTS,
-        "too_many_requests",
-        "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.",
-        headers={"Retry-After": str(math.ceil(retry_after))},
-    )
-
-
-def _enforce(limiter: SlidingWindowLimiter, key: str, *, record: bool) -> None:
-    retry_after = limiter.hit(key) if record else limiter.retry_after(key)
-    if retry_after is not None:
-        raise _too_many_requests(retry_after)
-
-
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest, request: Request, session: SessionDep, response: Response
 ) -> UserOut:
-    _enforce(register_limiter, _client_ip(request), record=True)
+    enforce(register_limiter, _client_ip(request), record=True)
     user = await service.create_user(session, body.email, body.password)
     _set_auth_cookies(response, user)
     return UserOut.model_validate(user)
@@ -82,7 +66,7 @@ async def login(
     body: LoginRequest, request: Request, session: SessionDep, response: Response
 ) -> UserOut:
     client_ip = _client_ip(request)
-    _enforce(login_limiter, client_ip, record=False)
+    enforce(login_limiter, client_ip, record=False)
     try:
         user = await service.authenticate(session, body.email, body.password)
     except AppError as exc:
