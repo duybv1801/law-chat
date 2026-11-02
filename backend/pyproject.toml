@@ -1,0 +1,91 @@
+[project]
+name = "law-chatbot-backend"
+version = "0.1.0"
+description = "Vietnamese law chatbot backend (FastAPI + RAG)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Web / API
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "sse-starlette>=2.1",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    # Vector DB
+    "qdrant-client>=1.11",
+    # Embedding (local)
+    "torch>=2.4",
+    "FlagEmbedding>=1.3",
+    # LLM
+    "litellm>=1.50",
+    "pyyaml>=6.0",
+    # Security
+    "cryptography>=43",
+    "pyjwt>=2.9",
+    "pwdlib[argon2]>=0.2",
+    # Ingestion
+    "pymupdf>=1.24",
+    "python-docx>=1.1",
+    # Crawler / scheduler / CLI
+    "httpx>=0.27",
+    "selectolax>=0.3.21",
+    "tenacity>=9.0",
+    "apscheduler>=3.10,<4",
+    "typer>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
+
+# Linux (no GPU) uses CPU-only torch wheels; macOS uses the default PyPI wheel (with MPS).
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+# Only lock for the two dev machines (and the Linux VPS); skip win32/emscripten forks.
+[tool.uv]
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "SIM"]
+
+# FastAPI dependency markers are meant to be used as default arguments (B008).
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Security",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "slow: tests that load the real embedding model (run with -m slow)",
+]
