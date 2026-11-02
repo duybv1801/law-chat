@@ -1,4 +1,14 @@
+import os
+
 import pytest
+
+# Test defaults, set before `app.core.config` is imported. Real env vars win over `.env`.
+os.environ.setdefault("APP_ENCRYPTION_KEYS", "ZmFrZS10ZXN0LWtleS0zMi1ieXRlcy1sb25nLWtleSE=")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-characters-long")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://law:law@localhost:5432/law_test")
+os.environ.setdefault("EMBEDDING_BACKEND", "fake")
+os.environ.setdefault("QDRANT_COLLECTION", "legal_chunks_fake")
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

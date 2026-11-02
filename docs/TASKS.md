@@ -16,7 +16,7 @@ Câu lệnh mẫu cho Claude Code:
 |---|---|---|---|
 | **P0 — Nền tảng** ||||
 | T01 | Scaffold monorepo backend + frontend | — | ✅ |
-| T02 | docker-compose Postgres + Qdrant, `.env.example`, config | T01 | ⬜ |
+| T02 | docker-compose Postgres + Qdrant, `.env.example`, config | T01 | ✅ |
 | T03 | DB models + Alembic migration đầu tiên | T02 | ⬜ |
 | **P1 — Auth & Cài đặt** ||||
 | T04 | Auth (register/login/refresh/logout/me) + CLI tạo admin | T03 | ⬜ |
@@ -231,8 +231,14 @@ T07, T09 và T12 không phụ thuộc auth. Có thể làm song song với P1 n�
 - T01: Frontend dùng TypeScript 7 (bản native) và `oxlint` thay ESLint (mặc định của create-vite hiện tại, nhanh hơn, ít cấu hình).
 - T01: `[tool.uv] environments` chỉ lock cho `darwin` và `linux`. Ruff cho phép `fastapi.Depends/Query/...` làm default argument (B008). Proxy Vite trỏ `127.0.0.1:8000` (tránh `localhost` resolve ra `::1` trên macOS).
 - T01: Thêm sẵn các dependency đã chốt cho các task sau (`pymupdf`, `python-docx`, `tenacity`, `typer`, `sse-starlette`, `pyyaml`, `apscheduler<4`, ...) để chỉ lock một lần.
+- T02: `.env` đặt ở **gốc repo** (cạnh `.env.example`); `config.py` đọc theo đường dẫn tuyệt đối nên chạy từ thư mục nào cũng được. Đường dẫn tương đối (`UPLOAD_DIR`, `HF_HOME`) được neo vào `backend/`. Biến để trống (`EMBEDDING_THREADS=`) coi như không đặt (`env_ignore_empty`).
+- T02: Extension `citext`, `unaccent` và DB test `law_test` được tạo bằng script init `docker/postgres/init/01-extensions.sql` (bind mount read-only vào `docker-entrypoint-initdb.d`; dữ liệu vẫn ở named volume). Script chỉ chạy khi volume rỗng; migration T03 vẫn tự `CREATE EXTENSION IF NOT EXISTS`. Qdrant pin `qdrant/qdrant:v1.20.0` (khớp `qdrant-client` 1.20).
+- T02: `APP_ENCRYPTION_KEYS` và `JWT_SECRET` là bắt buộc (không có default), kiểu `SecretStr` để không lộ qua `repr`/log. `CRAWLER_RATE_LIMIT_RPS` bị chặn `<= 1` ngay ở config (quy tắc 6). `SCHEDULER_ENABLED` mặc định `false` nếu không đặt.
+- T02: `/api/health` trả `{"status","postgres","qdrant"}`; một service lỗi → HTTP 503 `status=degraded` (timeout 3s mỗi check, chỉ log tên exception). `app/db/session.py` mới có `engine`; `get_session` để T03. `AsyncQdrantClient` tạo trong lifespan (`app.state.qdrant`), tắt `check_compatibility` để không gọi mạng lúc khởi động.
+- T02 (review): `DATABASE_URL` cũng là `SecretStr` (chứa mật khẩu DB; gọi `.get_secret_value()` khi tạo engine). `JWT_SECRET` tối thiểu 32 ký tự; mỗi phần tử `APP_ENCRYPTION_KEYS` phải là Fernet key hợp lệ. `hide_input_in_errors=True` để lỗi validate không in giá trị secret. `HF_HOME` được ghi đè bằng đường dẫn đã resolve (không `setdefault`). Test mặc định dùng DB `law_test` (`conftest.py`). Qdrant có healthcheck gọi `/readyz` qua `/dev/tcp` của bash (image không có curl/wget).
 
 ## Nhật ký
 (mỗi task một dòng: `T0x — ngày — tóm tắt — lệch so với docs (nếu có)`)
 
 - T01 — 2026-11-02 — Scaffold `backend/` (uv, Python 3.12, cây thư mục `app/` với file docstring, `/api/health`, lifespan, ruff + pytest-asyncio, 1 test health) và `frontend/` (Vite 8 + React 19 + TS + Tailwind 4 + React Router + TanStack Query, proxy `/api` → 8000). Thêm `.python-version`, `.gitignore`, `.gitattributes`, `.editorconfig`, `frontend/.nvmrc`. Đã kiểm tra trên Linux: `uv sync` OK, torch `2.15.0+cpu`, `cuda=False`, không có gói `nvidia-*`; `uvicorn` + `/api/health` OK (cả qua proxy Vite); `npm run build` OK; `pytest` 1 passed; `ruff` sạch. — Lệch: thư mục chưa phải git repo nên `uv.lock` chưa được commit; **chưa chạy `uv sync` trên Mac** (lock đã có wheel `macosx_14_0_arm64` từ PyPI, owner cần kiểm tra). `alembic/` và `config/` chỉ có `.gitkeep` (T03, T06 sẽ điền).
+- T02 — 2026-11-02 — `docker-compose.yml` (postgres:16 + qdrant v1.20.0, named volume `pgdata`/`qdrantdata`, healthcheck postgres), init SQL tạo `citext`/`unaccent` + DB `law_test`; `.env.example` có khối Mac/Linux; `app/core/config.py` (pydantic-settings, đủ biến, export `PYTORCH_ENABLE_MPS_FALLBACK`/`HF_HOME` vào `os.environ`, `main.py` import config đầu tiên); `scripts/gen_keys.py`; `/api/health` kiểm tra Postgres + Qdrant. Đã kiểm tra trên Linux: `docker compose up -d` lên cả hai service, `\dx` thấy 2 extension trong `law_test`; uvicorn đọc `.env` (Linux block) → health 200; dừng qdrant → 503 `qdrant=error`; bật lại → 200. `pytest` 15 passed; `ruff` sạch. — Lệch: thêm thư mục `docker/postgres/init/` (bind mount file init, không phải dữ liệu). Chưa kiểm tra trên Mac.
