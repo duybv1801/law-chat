@@ -1,0 +1,45 @@
+QUỐC HỘI
+Luật số: 99/2025/QH15
+CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+Độc lập - Tự do - Hạnh phúc
+
+LUẬT
+THỬ NGHIỆM CHUNKER
+Căn cứ Hiến pháp nước Cộng hòa xã hội chủ nghĩa Việt Nam;
+Quốc hội ban hành Luật Thử nghiệm chunker.
+
+Chương I
+NHỮNG QUY ĐỊNH CHUNG
+Điều 1. Phạm vi điều chỉnh
+Luật này quy định về việc thử nghiệm chunker.
+Điều 2. Đối tượng áp dụng
+1. Cơ quan nhà nước.
+2. Tổ chức, cá nhân có liên quan.
+Chương II
+QUYỀN VÀ NGHĨA VỤ
+Mục 1
+QUYỀN CỦA CÁ NHÂN
+Điều 3. Giải thích từ ngữ
+Trong Luật này, các từ ngữ dưới đây được hiểu như sau:
+1. Văn bản là tài liệu chứa đựng quy phạm pháp luật do cơ quan có thẩm quyền ban hành theo đúng trình tự thủ tục.
+2. Chunk là một đoạn văn bản được cắt ra để đưa vào chỉ mục tìm kiếm của hệ thống hỏi đáp pháp luật.
+a) Chunk phải giữ nguyên ngữ cảnh của điều luật;
+b) Chunk không được cắt ngang giữa một khoản.
+3. Breadcrumb là đường dẫn gồm phần, chương, mục chứa điều luật, giúp người đọc định vị nội dung.
+4. Khoản là đơn vị nhỏ hơn điều, được đánh số bằng chữ số Ả Rập và kết thúc bằng dấu chấm.
+5. Điểm là đơn vị nhỏ hơn khoản, được đánh dấu bằng chữ cái tiếng Việt theo thứ tự abc.
+Điều 4. Quyền được thông tin
+Cá nhân có quyền được thông tin về văn bản pháp luật.
+Mục 2
+NGHĨA VỤ CỦA CÁ NHÂN
+Điều 5. Nghĩa vụ tuân thủ
+Cá nhân có nghĩa vụ tuân thủ pháp luật.
+Phụ lục kèm theo Luật này là một phần của Luật.
+Luật này đã được Quốc hội khóa XV thông qua ngày 01 tháng 6 năm 2025.
+CHỦ TỊCH QUỐC HỘI
+Nguyễn Văn A
+
+PHỤ LỤC I
+DANH MỤC MẪU THỬ
+1. Mẫu số 01: Đơn đề nghị.
+2. Mẫu số 02: Tờ khai.
