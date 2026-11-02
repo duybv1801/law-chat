@@ -27,6 +27,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 USER_ROLES = ("user", "admin")
 Provider = Literal["openai", "anthropic", "gemini"]
 PROVIDERS: tuple[Provider, ...] = get_args(Provider)
+# Display names for user-facing messages; must cover every Provider (checked by a test).
+PROVIDER_LABELS: dict[Provider, str] = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "gemini": "Gemini",
+}
 DOCUMENT_SOURCES = ("vbpl", "user_upload")
 DOCUMENT_STATUSES = (
     "con_hieu_luc",

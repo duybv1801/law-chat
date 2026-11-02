@@ -1,18 +1,45 @@
-"""Settings API routes: API keys per provider (T05); default model (T06)."""
+"""Settings API routes: API keys per provider (T05); model list and default model (T06)."""
 
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
 
 from app.auth.rate_limit import api_key_save_limiter, enforce
 from app.core.deps import CurrentUser, SessionDep
+from app.llm.registry import ModelRegistry, registry_dep
 from app.settings import service
-from app.settings.schemas import ApiKeyIn, ApiKeySaved, Provider, SettingsOut
+from app.settings.schemas import (
+    ApiKeyIn,
+    ApiKeySaved,
+    ModelOut,
+    Provider,
+    SettingsIn,
+    SettingsOut,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+models_router = APIRouter(prefix="/models", tags=["settings"])
+
+RegistryDep = Annotated[ModelRegistry, Depends(registry_dep)]
+
+
+@models_router.get("")
+async def list_models(_user: CurrentUser, registry: RegistryDep) -> list[ModelOut]:
+    return [ModelOut.model_validate(m) for m in registry.enabled_models()]
 
 
 @router.get("")
-async def get_settings(user: CurrentUser, session: SessionDep) -> SettingsOut:
-    return await service.get_settings(session, user.id)
+async def get_settings(
+    user: CurrentUser, session: SessionDep, registry: RegistryDep
+) -> SettingsOut:
+    return await service.get_settings(session, user.id, registry)
+
+
+@router.put("")
+async def put_settings(
+    body: SettingsIn, user: CurrentUser, session: SessionDep, registry: RegistryDep
+) -> SettingsOut:
+    return await service.set_default_model(session, user.id, body.default_model_id, registry)
 
 
 @router.put("/api-keys/{provider}")
