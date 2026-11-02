@@ -132,7 +132,7 @@ async def client(db_session):
     """
     import httpx
 
-    from app.auth.rate_limit import login_limiter, register_limiter
+    from app.auth.rate_limit import api_key_save_limiter, login_limiter, register_limiter
     from app.db.session import get_session
     from app.main import app
 
@@ -142,6 +142,7 @@ async def client(db_session):
     app.dependency_overrides[get_session] = override_session
     login_limiter.reset()
     register_limiter.reset()
+    api_key_save_limiter.reset()
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
@@ -152,3 +153,4 @@ async def client(db_session):
     app.dependency_overrides.pop(get_session, None)
     login_limiter.reset()
     register_limiter.reset()
+    api_key_save_limiter.reset()
