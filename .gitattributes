@@ -5,3 +5,6 @@
 *.pdf binary
 *.docx binary
 *.gz binary
+
+# Byte-exact crawl fixtures (RSC text rows are length-prefixed in bytes)
+backend/tests/fixtures/** -text
