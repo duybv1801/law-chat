@@ -16,6 +16,7 @@ from app.auth.router import router as auth_router
 from app.core.csrf import CsrfHeaderMiddleware
 from app.core.errors import register_error_handlers
 from app.db.session import engine
+from app.ingest.chunker import default_token_counter
 from app.llm.registry import get_registry
 from app.settings.router import models_router
 from app.settings.router import router as settings_router
@@ -28,6 +29,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_registry()  # fail fast on a broken config/models.yaml (raises RegistryError)
+    try:
+        # May download tokenizer.json once; keep it off the event loop and off the first upload.
+        await asyncio.to_thread(default_token_counter)
+    except Exception:
+        # Chat and the rest of the app work without it; chunking retries on first use.
+        logger.warning("Could not load the chunker tokenizer", exc_info=True)
     app.state.qdrant = AsyncQdrantClient(
         # Version check would hit the network at startup; /api/health covers connectivity.
         url=settings.qdrant_url,
