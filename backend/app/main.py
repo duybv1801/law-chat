@@ -17,6 +17,7 @@ from app.core.csrf import CsrfHeaderMiddleware
 from app.core.errors import register_error_handlers
 from app.db.session import engine
 from app.ingest.chunker import default_token_counter
+from app.ingest.embedder import get_embedder
 from app.llm.registry import get_registry
 from app.settings.router import models_router
 from app.settings.router import router as settings_router
@@ -29,21 +30,30 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_registry()  # fail fast on a broken config/models.yaml (raises RegistryError)
+    qdrant: AsyncQdrantClient | None = None
     try:
-        # May download tokenizer.json once; keep it off the event loop and off the first upload.
-        await asyncio.to_thread(default_token_counter)
-    except Exception:
-        # Chat and the rest of the app work without it; chunking retries on first use.
-        logger.warning("Could not load the chunker tokenizer", exc_info=True)
-    app.state.qdrant = AsyncQdrantClient(
-        # Version check would hit the network at startup; /api/health covers connectivity.
-        url=settings.qdrant_url,
-        check_compatibility=False,
-    )
-    try:
+        # Both may download once; load them in parallel, off the event loop.
+        tokenizer, embedder = await asyncio.gather(
+            asyncio.to_thread(default_token_counter),
+            asyncio.to_thread(get_embedder),
+            return_exceptions=True,
+        )
+        if isinstance(tokenizer, Exception):
+            # Chat and the rest of the app work without it; chunking retries on first use.
+            logger.warning("Could not load the chunker tokenizer", exc_info=tokenizer)
+        elif isinstance(tokenizer, BaseException):
+            raise tokenizer
+        if isinstance(embedder, BaseException):
+            raise embedder  # fail fast: chat and indexing need the embedding model
+        qdrant = app.state.qdrant = AsyncQdrantClient(
+            # Version check would hit the network at startup; /api/health covers connectivity.
+            url=settings.qdrant_url,
+            check_compatibility=False,
+        )
         yield
     finally:
-        await app.state.qdrant.close()
+        if qdrant is not None:
+            await qdrant.close()
         await engine.dispose()
 
 
