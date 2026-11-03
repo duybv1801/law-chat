@@ -64,6 +64,7 @@ UNIQUE (`user_id`, `provider`). Lưu lại key cho cùng provider thì ghi đè 
 | ingest_status | text | `pending` \| `processing` \| `done` \| `failed` |
 | ingest_error | text NULL | |
 | embedding_model | text NULL | model dùng khi index |
+| payload_dirty | bool, default false | metadata đã commit nhưng chưa chép sang payload Qdrant (outbox) |
 | crawled_at | timestamptz NULL | |
 | status_checked_at | timestamptz NULL | |
 
@@ -141,6 +142,6 @@ Lưu tên model embedding vào metadata của collection (hoặc một bảng `a
 
 ## Đồng bộ Postgres → Qdrant
 
-- Sửa metadata văn bản (tình trạng, ngày) → `set_payload` với filter `document_id`.
+- Sửa metadata văn bản (tình trạng, ngày) → commit Postgres kèm `payload_dirty=true`, rồi `set_payload` (toàn bộ payload) với filter `document_id` và xoá cờ. Qdrant lỗi thì worker trong backend thử lại mỗi 60s.
 - Xoá văn bản → `delete` theo filter `document_id`, sau đó xoá trong Postgres.
 - Viết hết vào `app/ingest/indexer.py`. Không module nào khác được gọi Qdrant client để ghi.

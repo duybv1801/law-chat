@@ -155,6 +155,11 @@ class LegalDocument(TimestampMixin, Base):
             unique=True,
             postgresql_where=text("source_id IS NOT NULL"),
         ),
+        Index(
+            "ix_legal_documents_payload_dirty",
+            "payload_dirty",
+            postgresql_where=text("payload_dirty"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -191,6 +196,10 @@ class LegalDocument(TimestampMixin, Base):
     ingest_status: Mapped[str] = mapped_column(Text, default="pending", server_default="pending")
     ingest_error: Mapped[str | None] = mapped_column(Text)
     embedding_model: Mapped[str | None] = mapped_column(Text)
+    # Metadata committed but not yet copied to the Qdrant payload (outbox, see indexer).
+    payload_dirty: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
