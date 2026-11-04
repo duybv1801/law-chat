@@ -1,4 +1,4 @@
-"""LLM error types. Mapping of LiteLLM / provider exceptions is completed in T17."""
+"""LLM error types. LiteLLM / provider exceptions are mapped in `app.llm.client.map_exception`."""
 
 from typing import Literal
 

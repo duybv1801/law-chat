@@ -21,7 +21,7 @@ OTHER_KEY = "sk-fake-another-key-9876"
 
 @pytest.fixture
 def validator_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
-    """Mock `validate_key` (real provider call lands in T17).
+    """Mock `validate_key` (the real one calls the provider, see tests/test_llm_client.py).
 
     Keys containing "bad" are rejected, "flaky" is rate limited, "boom" raises an unmapped
     exception, "unchecked" passes without a provider check; any other key is confirmed.
@@ -61,9 +61,7 @@ def test_api_key_schema_hides_and_strips_key() -> None:
     assert FAKE_KEY not in repr(body) and FAKE_KEY not in str(body)
 
 
-async def test_placeholder_validate_key_rejects_blank_or_spaced() -> None:
-    # Not checked with the provider yet (T17), so it must not report the key as validated.
-    assert await llm_client.validate_key(provider="openai", api_key=FAKE_KEY) is False
+async def test_validate_key_rejects_blank_or_spaced_without_provider_call() -> None:
     for bad in ("", "sk with space"):
         with pytest.raises(LLMError) as info:
             await llm_client.validate_key(provider="openai", api_key=bad)

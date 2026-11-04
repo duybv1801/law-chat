@@ -55,7 +55,7 @@ class ModelRegistry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     models: Annotated[list[ModelSpec], Field(min_length=1)]
-    # Cheap model per provider used to check a key when the user saves it (T17).
+    # Cheap model per provider used to check a key when it is saved (`client.validate_key`).
     validation_model: dict[Provider, NonEmptyStr]
 
     @model_validator(mode="after")
