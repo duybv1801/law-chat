@@ -453,3 +453,11 @@ def test_detect_empty_text() -> None:
         "issued_date_source": None,
         "title": None,
     }
+
+
+def test_looks_like_text_utf16_surrogate_at_sample_boundary() -> None:
+    from app.ingest.parsers.txt import looks_like_text
+
+    # 4095 BMP chars (8190 bytes) then a surrogate pair split by the 8192-byte sample.
+    data = ("a" * 4095 + "\U0001f600" + "b" * 10).encode("utf-16-le")
+    assert looks_like_text(data)

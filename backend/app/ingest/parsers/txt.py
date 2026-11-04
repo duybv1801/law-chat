@@ -37,5 +37,17 @@ def decode(data: bytes) -> str:
         return data.decode("cp1258", errors="replace")
 
 
+def looks_like_text(data: bytes, sample_size: int = 8192) -> bool:
+    """False for binary content: NUL bytes are only expected in UTF-16 text."""
+    sample = data[:sample_size]
+    if sample.startswith((codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return True
+    if b"\x00" not in sample:
+        return True
+    sample = sample[: len(sample) // 2 * 2]
+    # The cut may split a surrogate pair; retry without the last code unit.
+    return any(_utf16_without_bom(part) is not None for part in (sample, sample[:-2]))
+
+
 def extract_text(data: bytes) -> tuple[str, list[dict[str, Any]]]:
     return decode(data), []

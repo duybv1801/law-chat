@@ -1,6 +1,7 @@
 """Async SQLAlchemy engine, session factory and the `get_session` FastAPI dependency."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -23,3 +24,11 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     """Yield one session per request. Callers commit explicitly; errors roll back."""
     async with SessionLocal() as session:
         yield session
+
+
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+def get_session_factory() -> SessionFactory:
+    """Sessions for work that outlives the request (background tasks); overridden in tests."""
+    return SessionLocal
