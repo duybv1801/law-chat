@@ -3,19 +3,29 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Cookie, Depends, status
+from fastapi import Cookie, Depends, Request, status
+from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.core.errors import AppError
 from app.core.security import TokenKind, decode_token
 from app.db.models import User
-from app.db.session import get_session
+from app.db.session import SessionFactory, get_session, get_session_factory
 
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionFactoryDep = Annotated[SessionFactory, Depends(get_session_factory)]
+
+
+def get_qdrant(request: Request) -> AsyncQdrantClient:
+    """The client created in the app lifespan."""
+    return request.app.state.qdrant
+
+
+QdrantDep = Annotated[AsyncQdrantClient, Depends(get_qdrant)]
 
 
 def not_authenticated() -> AppError:

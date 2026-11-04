@@ -16,6 +16,8 @@ from app.auth.router import router as auth_router
 from app.core.csrf import CsrfHeaderMiddleware
 from app.core.errors import register_error_handlers
 from app.db.session import SessionLocal, engine
+from app.documents.router import router as documents_router
+from app.documents.service import resume_interrupted_uploads
 from app.ingest.chunker import default_token_counter
 from app.ingest.embedder import get_embedder
 from app.ingest.indexer import (
@@ -48,11 +50,18 @@ async def payload_sync_loop(qdrant: AsyncQdrantClient) -> None:
             logger.warning("Payload sync run failed: %s", type(exc).__name__)
 
 
+async def resume_uploads(qdrant: AsyncQdrantClient) -> None:
+    try:
+        await resume_interrupted_uploads(SessionLocal, qdrant)
+    except Exception as exc:
+        logger.warning("Could not resume interrupted uploads: %s", type(exc).__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_registry()  # fail fast on a broken config/models.yaml (raises RegistryError)
     qdrant: AsyncQdrantClient | None = None
-    sync_task: asyncio.Task[None] | None = None
+    tasks: list[asyncio.Task[None]] = []
     try:
         # Both may download once; load them in parallel, off the event loop.
         tokenizer, embedder = await asyncio.gather(
@@ -80,13 +89,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Qdrant not up yet: auth and settings still work, /api/health reports it, and
             # indexing checks the collection on first use.
             logger.warning("Could not check the Qdrant collection: %s", type(exc).__name__)
-        sync_task = asyncio.create_task(payload_sync_loop(qdrant))
+        tasks.append(asyncio.create_task(payload_sync_loop(qdrant)))
+        tasks.append(asyncio.create_task(resume_uploads(qdrant)))
         yield
     finally:
-        if sync_task is not None:
-            sync_task.cancel()
+        for task in tasks:
+            task.cancel()
             with suppress(asyncio.CancelledError):
-                await sync_task
+                await task
         if qdrant is not None:
             await qdrant.close()
         await engine.dispose()
@@ -98,6 +108,7 @@ register_error_handlers(app)
 app.include_router(auth_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
+app.include_router(documents_router, prefix="/api")
 
 
 async def check_postgres() -> None:

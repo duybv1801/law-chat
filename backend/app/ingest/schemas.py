@@ -16,6 +16,15 @@ Status = Literal[
 ]
 Scope = Literal["trung_uong", "dia_phuong"]
 
+# Shown to users (document list, citations).
+STATUS_LABELS: dict[str, str] = {
+    "con_hieu_luc": "Còn hiệu lực",
+    "het_hieu_luc_mot_phan": "Hết hiệu lực một phần",
+    "het_hieu_luc_toan_bo": "Hết hiệu lực toàn bộ",
+    "chua_co_hieu_luc": "Chưa có hiệu lực",
+    "khong_xac_dinh": "Không xác định",
+}
+
 _SPACES = re.compile(r"\s+")
 
 
