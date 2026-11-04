@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # vbpl.vn politeness: never more than 1 request/second.
     crawler_rate_limit_rps: float = Field(default=1.0, gt=0, le=1)
     crawler_user_agent: str = "LawChatbot/0.1 (+contact email)"
+    # Dev only: keep raw responses so parser changes do not re-download pages.
+    crawler_cache: bool = False
+    crawler_cache_dir: Path = Path("storage/crawl_cache")
     scheduler_enabled: bool = False
     tz_app: str = "Asia/Ho_Chi_Minh"
 
@@ -72,7 +75,7 @@ class Settings(BaseSettings):
         build_fernet(value)  # the error names the key's position, never the key itself
         return value
 
-    @field_validator("upload_dir", "hf_home")
+    @field_validator("upload_dir", "hf_home", "crawler_cache_dir")
     @classmethod
     def _resolve_path(cls, value: Path | None) -> Path | None:
         # Relative paths are anchored at backend/ so the cwd does not matter.
