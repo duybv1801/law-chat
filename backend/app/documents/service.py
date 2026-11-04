@@ -248,8 +248,13 @@ async def resume_interrupted_uploads(
 # --- Read --------------------------------------------------------------------------------
 
 
+def visible_to_user_id(user_id: uuid.UUID) -> ColumnElement[bool]:
+    """Rule 5: vbpl documents, or the user's own uploads."""
+    return or_(LegalDocument.source == "vbpl", LegalDocument.owner_id == user_id)
+
+
 def visible_to(user: User) -> ColumnElement[bool]:
-    return or_(LegalDocument.source == "vbpl", LegalDocument.owner_id == user.id)
+    return visible_to_user_id(user.id)
 
 
 def _escape_like(value: str) -> str:

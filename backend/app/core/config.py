@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("storage/uploads")
 
     rag_top_k: int = Field(default=8, gt=0)
-    rag_min_score: float = 0.0
+    # Conservative floor (lowest value swept by T25) so a missing .env never disables rule 3.
+    rag_min_score: float = 0.3
 
     # vbpl.vn politeness: never more than 1 request/second.
     crawler_rate_limit_rps: float = Field(default=1.0, gt=0, le=1)
