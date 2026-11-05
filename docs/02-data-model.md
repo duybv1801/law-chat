@@ -99,6 +99,7 @@ UNIQUE (`source`, `source_id`) WHERE `source_id IS NOT NULL`. Index trên `so_hi
 | retrieved_chunk_ids | uuid[] | để debug và đánh giá |
 | refused | bool | true nếu từ chối vì không đủ dữ liệu |
 | usage | jsonb NULL | token in/out nếu provider trả về |
+| error | text NULL | câu trả lời chưa xong: mã lỗi LLM, `retrieval_failed` hoặc `cancelled`; `content` giữ phần đã sinh |
 
 ### `crawl_runs`
 `id`, `job_type` (`backfill` \| `daily_new` \| `status_refresh`), `status` (`running` \| `success` \| `failed` \| `partial`), `started_at`, `finished_at`, `stats` jsonb (`fetched`, `created`, `updated`, `unchanged`, `status_changed`, `failed`), `error` text, `params` jsonb.

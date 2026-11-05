@@ -274,6 +274,9 @@ class Message(TimestampMixin, Base):
     )
     refused: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Assistant answer that did not finish: LLM error code, "retrieval_failed" or "cancelled".
+    # `content` then holds the part generated before the error.
+    error: Mapped[str | None] = mapped_column(Text)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
