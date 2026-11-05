@@ -8,12 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # Pragmatic check (no `email-validator` dependency): one "@", a dot in the domain, no spaces.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Mirrored in frontend/src/api/auth.ts (kept in sync by tests/test_auth.py).
+EMAIL_MAX = 254
 PASSWORD_MIN = 8
 PASSWORD_MAX = 128  # bounds argon2 work per request
 
 
 class Credentials(BaseModel):
-    email: str = Field(max_length=254)
+    email: str = Field(max_length=EMAIL_MAX)
     password: str = Field(min_length=1, max_length=PASSWORD_MAX)
 
     @field_validator("email")
