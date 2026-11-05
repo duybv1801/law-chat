@@ -14,6 +14,15 @@ import {
   useSetDefaultModel,
   useSettings,
 } from '../hooks/useSettings.ts'
+import {
+  dangerButton,
+  ErrorText,
+  inputClass,
+  primaryButton,
+  secondaryButton,
+  sectionClass,
+  Spinner,
+} from '../components/ui.tsx'
 import { errorMessage } from '../lib/errors.ts'
 import {
   apiKeyErrorMessage,
@@ -22,32 +31,6 @@ import {
   maskedKey,
   selectableModels,
 } from '../lib/settings.ts'
-
-const inputClass =
-  'w-full min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50'
-const primaryButton =
-  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60'
-const secondaryButton =
-  'shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60'
-const dangerButton =
-  'shrink-0 whitespace-nowrap rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-60'
-
-function Spinner() {
-  return (
-    <span
-      aria-hidden
-      className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-    />
-  )
-}
-
-function ErrorText({ children }: { children: string }) {
-  return (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {children}
-    </p>
-  )
-}
 
 interface KeyFormProps {
   provider: Provider
@@ -285,8 +268,6 @@ function DefaultModelSection({ apiKeys, defaultModelId }: {
     </div>
   )
 }
-
-const sectionClass = 'rounded-lg border border-slate-200 bg-white p-5 shadow-sm'
 
 export default function SettingsPage() {
   const settings = useSettings()

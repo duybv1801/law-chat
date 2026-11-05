@@ -426,3 +426,20 @@ async def test_resume_interrupted_uploads(
     assert lost.ingest_status == "failed"
     assert lost.ingest_error == service.INGEST_INTERRUPTED_MESSAGE
     assert await service.resume_interrupted_uploads(session_factory, qdrant) == 0
+
+
+def test_documents_constants_match_frontend() -> None:
+    """The Documents tab mirrors these values; keep frontend/src/api/documents.ts in sync."""
+    from app.documents import schemas
+    from app.ingest.parsers import SUPPORTED_EXTENSIONS
+    from app.ingest.parsers.detect import DOC_TYPES
+    from tests.frontend_sync import read_ts_source, ts_int_const, ts_str_list, ts_str_record
+
+    source = read_ts_source("api/documents.ts")
+    for name in ("TITLE_MAX", "SHORT_FIELD_MAX", "PAGE_SIZE_MAX"):
+        assert ts_int_const(source, name) == getattr(schemas, name), name
+    assert ts_int_const(source, "MAX_UPLOAD_BYTES") == service.MAX_UPLOAD_BYTES
+    assert ts_str_list(source, "UPLOAD_EXTENSIONS") == sorted(SUPPORTED_EXTENSIONS)
+    assert ts_str_list(source, "STATUSES") == list(DOCUMENT_STATUSES)
+    assert ts_str_record(source, "STATUS_LABELS") == STATUS_LABELS
+    assert set(DOC_TYPES) <= set(ts_str_list(source, "DOC_TYPES"))
