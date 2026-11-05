@@ -572,3 +572,23 @@ async def test_message_validation(api, db_session) -> None:
     assert (
         await api.post(f"/api/chat/conversations/{uuid.uuid4()}/messages", json={"content": "a"})
     ).status_code == 404
+
+
+def test_chat_constants_match_frontend() -> None:
+    """The chat tab mirrors these values; keep frontend/src/api/chat.ts and lib/chat.ts in sync."""
+    from app.chat import schemas
+    from app.llm.errors import USER_MESSAGES
+    from app.rag.service import CHAT_ERROR_MESSAGES
+    from tests.frontend_sync import read_ts_source, ts_int_const, ts_str_record
+
+    api_source = read_ts_source("api/chat.ts")
+    for name in ("QUESTION_MAX_CHARS", "TITLE_MAX_CHARS", "PAGE_SIZE"):
+        assert ts_int_const(api_source, name) == getattr(schemas, name), name
+
+    error_text = ts_str_record(read_ts_source("lib/chat.ts"), "CHAT_ERROR_TEXT")
+    backend = {**USER_MESSAGES, **CHAT_ERROR_MESSAGES}
+    # The backend fills the provider name into this one; the frontend text is generic.
+    backend.pop("no_api_key")
+    assert "no_api_key" in error_text
+    for code, message in backend.items():
+        assert error_text.get(code) == message, code
