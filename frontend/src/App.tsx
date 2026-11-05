@@ -16,8 +16,8 @@ export default function App() {
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="/documents" element={<DocumentsPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/chat/:conversationId" element={<ChatPage />} />
+        {/* One route with an optional segment: creating a conversation keeps ChatPage (and its stream) mounted. */}
+        <Route path="/chat/:conversationId?" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
