@@ -95,6 +95,23 @@ def test_auth_errors_are_fresh_instances() -> None:
     assert service.email_taken() is not service.email_taken()
 
 
+def test_auth_limits_match_frontend() -> None:
+    """The register/login form mirrors these limits; keep frontend/src/api/auth.ts in sync."""
+    import re
+    from pathlib import Path
+
+    from app.auth import schemas
+
+    ts_file = Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "auth.ts"
+    if not ts_file.exists():
+        pytest.skip("frontend sources not present")
+    source = ts_file.read_text(encoding="utf-8")
+    for name in ("EMAIL_MAX", "PASSWORD_MIN", "PASSWORD_MAX"):
+        match = re.search(rf"export const {name} = (\d+)", source)
+        assert match, f"{name} missing in {ts_file}"
+        assert int(match.group(1)) == getattr(schemas, name), name
+
+
 # --- API ----------------------------------------------------------------------------------
 
 
