@@ -13,6 +13,7 @@ from app.llm import client as llm_client
 from app.llm.errors import LLMError
 from app.llm.registry import ModelRegistry, registry_dep
 from app.settings.schemas import ApiKeyIn
+from tests.frontend_sync import read_ts_source, ts_int_const
 
 PASSWORD = "mat-khau-123"
 FAKE_KEY = "sk-fake-0123456789abcdefWXYZ"
@@ -536,3 +537,20 @@ async def test_default_model_disabled_later_reads_as_null(
 
 def test_provider_labels_cover_every_provider() -> None:
     assert set(PROVIDER_LABELS) == set(PROVIDERS)
+
+
+def test_settings_constants_match_frontend() -> None:
+    """The Settings page mirrors these values; keep frontend/src/api/settings.ts in sync."""
+    import re
+
+    from app.settings import schemas
+
+    source = read_ts_source("api/settings.ts")
+    for name in ("API_KEY_MIN", "API_KEY_MAX"):
+        assert ts_int_const(source, name) == getattr(schemas, name), name
+    providers = re.search(r"export const PROVIDERS = \[([^\]]*)\]", source)
+    assert providers, "PROVIDERS missing in api/settings.ts"
+    assert re.findall(r"'(\w+)'", providers.group(1)) == list(PROVIDERS)
+    labels = re.search(r"PROVIDER_LABELS[^=]*= \{([^}]*)\}", source)
+    assert labels, "PROVIDER_LABELS missing in api/settings.ts"
+    assert dict(re.findall(r"(\w+): '([^']*)'", labels.group(1))) == PROVIDER_LABELS

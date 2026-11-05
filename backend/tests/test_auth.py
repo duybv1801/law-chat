@@ -11,6 +11,7 @@ from app.auth import service
 from app.auth.rate_limit import LOGIN_MAX_ATTEMPTS, REGISTER_MAX_ATTEMPTS, SlidingWindowLimiter
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.db.models import User
+from tests.frontend_sync import read_ts_source, ts_int_const
 
 EMAIL = "an@example.com"
 PASSWORD = "mat-khau-123"
@@ -97,19 +98,11 @@ def test_auth_errors_are_fresh_instances() -> None:
 
 def test_auth_limits_match_frontend() -> None:
     """The register/login form mirrors these limits; keep frontend/src/api/auth.ts in sync."""
-    import re
-    from pathlib import Path
-
     from app.auth import schemas
 
-    ts_file = Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "auth.ts"
-    if not ts_file.exists():
-        pytest.skip("frontend sources not present")
-    source = ts_file.read_text(encoding="utf-8")
+    source = read_ts_source("api/auth.ts")
     for name in ("EMAIL_MAX", "PASSWORD_MIN", "PASSWORD_MAX"):
-        match = re.search(rf"export const {name} = (\d+)", source)
-        assert match, f"{name} missing in {ts_file}"
-        assert int(match.group(1)) == getattr(schemas, name), name
+        assert ts_int_const(source, name) == getattr(schemas, name), name
 
 
 # --- API ----------------------------------------------------------------------------------
