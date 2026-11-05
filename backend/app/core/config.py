@@ -95,7 +95,10 @@ class Settings(BaseSettings):
 
 
 def export_process_env(s: Settings) -> None:
-    """Expose settings that torch / huggingface read from `os.environ` at import time."""
+    """Expose settings that torch / huggingface / LiteLLM read from `os.environ` at import time."""
+    # LiteLLM fetches its model cost map from GitHub at import (5s timeout offline): use the
+    # copy shipped with the package.
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     os.environ.setdefault(
         "PYTORCH_ENABLE_MPS_FALLBACK", "1" if s.pytorch_enable_mps_fallback else "0"
     )

@@ -84,10 +84,13 @@ async def set_default_model(
     return await get_settings(session, user_id, registry)
 
 
-# invalid_key is the user's fault; a throttled provider is temporary; anything else is an
-# upstream failure. In every case the key is not saved.
+# invalid_key / access_denied / quota_exceeded need action in the user's provider account; a
+# throttled provider is temporary; anything else is an upstream (or validation_model config)
+# failure. In every case the key is not saved.
 _CHECK_STATUS: dict[LLMErrorCode, int] = {
     "invalid_key": status.HTTP_400_BAD_REQUEST,
+    "access_denied": status.HTTP_400_BAD_REQUEST,
+    "quota_exceeded": status.HTTP_400_BAD_REQUEST,
     "rate_limited": status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
