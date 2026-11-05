@@ -45,11 +45,11 @@ REGISTRY = ModelRegistry.model_validate(
 )
 
 
-def _error(cls: type[Exception], status: int = 400) -> Exception:
+def _error(cls: type[Exception], status: int = 400, message: str = "bad request") -> Exception:
     # The message echoes the key, as provider errors sometimes do.
-    kwargs: dict[str, Any] = {"message": f"bad request with key {KEY}"}
+    kwargs: dict[str, Any] = {"message": f"{message} with key {KEY}"}
     kwargs |= {"model": "openai/test-model", "llm_provider": "openai"}
-    if cls is litellm.PermissionDeniedError:
+    if cls in (litellm.PermissionDeniedError, litellm.UnprocessableEntityError):
         kwargs["response"] = httpx.Response(status, request=httpx.Request("POST", "https://x"))
     return cls(**kwargs)
 
@@ -108,11 +108,19 @@ def _assert_no_leak(error: LLMError, caplog: pytest.LogCaptureFixture) -> None:
     ("exc", "code"),
     [
         (_error(litellm.AuthenticationError), "invalid_key"),
-        (_error(litellm.PermissionDeniedError, 403), "invalid_key"),
+        (_error(litellm.PermissionDeniedError, 403), "access_denied"),
         (_error(litellm.RateLimitError), "rate_limited"),
+        # Gemini uses this text for per-minute limits too: still a temporary throttle.
+        (_error(litellm.RateLimitError, message="You exceeded your current quota"), "rate_limited"),
+        (_error(litellm.RateLimitError, message="insufficient_quota"), "quota_exceeded"),
+        (_error(litellm.BadRequestError, message="Credit balance too low"), "quota_exceeded"),
+        (_error(litellm.PaymentRequiredError), "quota_exceeded"),
         (_error(litellm.ContextWindowExceededError), "context_too_long"),
-        (_error(litellm.BadRequestError), "provider_error"),
-        (_error(litellm.NotFoundError), "provider_error"),
+        (_error(litellm.BadRequestError), "request_rejected"),
+        (_error(litellm.ContentPolicyViolationError), "request_rejected"),
+        (_error(litellm.NotFoundError), "request_rejected"),
+        (_error(litellm.UnprocessableEntityError, 422), "request_rejected"),
+        (_error(litellm.UnsupportedParamsError), "request_rejected"),
         (_error(litellm.Timeout), "provider_error"),
         (_error(litellm.APIConnectionError), "provider_error"),
         (_error(litellm.ServiceUnavailableError), "provider_error"),
@@ -224,6 +232,20 @@ async def test_stream_chat_unknown_or_disabled_model(
     _patch_acompletion(monkeypatch, calls, FakeStream([]))
     with pytest.raises(ValueError):
         await _collect(model_id=model_id, api_key=KEY, messages=[])
+    assert calls == []
+
+
+async def test_stream_chat_placeholder_model_is_not_sent(
+    monkeypatch: pytest.MonkeyPatch, calls: list[dict]
+) -> None:
+    registry = REGISTRY.model_copy(
+        update={"models": [REGISTRY.models[0].model_copy(update={"litellm_model": "openai/<x>"})]}
+    )
+    monkeypatch.setattr(llm_client, "get_registry", lambda: registry)
+    _patch_acompletion(monkeypatch, calls, FakeStream(["x"]))
+    with pytest.raises(LLMError) as info:
+        await _collect(model_id="openai-main", api_key=KEY, messages=[])
+    assert info.value.code == "provider_error"
     assert calls == []
 
 

@@ -44,9 +44,12 @@ async def validate_key(*, provider: str, api_key: str) -> None     # raise LLMEr
 - Tắt log message / request body của LiteLLM, không bật verbose. Kiểm tra cấu hình tương ứng trong docs LiteLLM của phiên bản đang dùng.
 - Map exception sang `LLMError(code, user_message)` trong `errors.py`:
   - lỗi xác thực → `invalid_key`: "API key không hợp lệ hoặc đã bị thu hồi. Vào Cài đặt để cập nhật."
+  - 403 (key đúng nhưng không có quyền dùng model / khu vực bị chặn) → `access_denied`
+  - hết số dư / hết quota (`PaymentRequiredError`, 400 "credit balance", 429 `insufficient_quota`) → `quota_exceeded`
   - rate limit → `rate_limited`
   - vượt context window → `context_too_long`
-  - còn lại → `provider_error`
+  - provider từ chối yêu cầu (400/404/422, content policy, tham số không hỗ trợ) → `request_rejected`
+  - còn lại (timeout, mất kết nối, 5xx) → `provider_error`
 - `validate_key`: gọi `validation_model` với `max_tokens=1`, thành công thì cập nhật `validated_at`.
 
 ## Mã hoá key (`app/core/crypto.py`)

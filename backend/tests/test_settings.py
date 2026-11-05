@@ -23,7 +23,8 @@ OTHER_KEY = "sk-fake-another-key-9876"
 def validator_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     """Mock `validate_key` (the real one calls the provider, see tests/test_llm_client.py).
 
-    Keys containing "bad" are rejected, "flaky" is rate limited, "boom" raises an unmapped
+    Keys containing "bad" are rejected, "noaccess" / "broke" get access_denied /
+    quota_exceeded, "flaky" is rate limited, "boom" raises an unmapped
     exception, "unchecked" passes without a provider check; any other key is confirmed.
     """
     calls: list[tuple[str, str]] = []
@@ -32,6 +33,10 @@ def validator_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
         calls.append((provider, api_key))
         if "bad" in api_key:
             raise LLMError("invalid_key")
+        if "noaccess" in api_key:
+            raise LLMError("access_denied")
+        if "broke" in api_key:
+            raise LLMError("quota_exceeded")
         if "flaky" in api_key:
             raise LLMError("rate_limited")
         if "boom" in api_key:
@@ -152,6 +157,21 @@ async def test_invalid_key_is_rejected_and_not_saved(
     row = await db_session.scalar(select(UserApiKey).where(UserApiKey.user_id == user_id))
     assert row is not None
     assert decrypt_secret(row.encrypted_key) == FAKE_KEY
+
+
+@pytest.mark.parametrize(
+    ("key", "code"),
+    [("sk-noaccess-key-3333", "access_denied"), ("sk-broke-key-4444", "quota_exceeded")],
+)
+async def test_account_problem_is_400_and_not_saved(
+    client: httpx.AsyncClient, db_session: AsyncSession, validator_calls, key: str, code: str
+) -> None:
+    user_id = await _login(client)
+    response = await _put_key(client, "openai", key)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == code
+    assert key not in response.text
+    assert await db_session.scalar(select(UserApiKey).where(UserApiKey.user_id == user_id)) is None
 
 
 async def test_unverifiable_key_is_not_saved(

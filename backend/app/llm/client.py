@@ -5,6 +5,7 @@ share one process). LiteLLM is imported lazily (it takes ~2s) and configured onc
 never logs messages, request bodies or keys (rule 1).
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -40,21 +41,51 @@ def _litellm() -> ModuleType:
     return litellm
 
 
-def map_exception(exc: Exception) -> LLMError:
-    """Map a LiteLLM / provider exception to `LLMError` (docs/05-rag-chat.md).
+async def _litellm_async() -> ModuleType:
+    """`_litellm()` off the event loop: the first import blocks for ~2s."""
+    return await asyncio.to_thread(_litellm)
 
-    Order matters: `ContextWindowExceededError` is a `BadRequestError`.
-    """
-    litellm = _litellm()
-    code: LLMErrorCode
+
+# Lower-cased fragments of provider messages that mean "no credit / quota left", not a
+# temporary throttle. Only OpenAI's `insufficient_quota` is trusted on a 429: Gemini says
+# "exceeded your current quota" for per-minute limits too.
+_QUOTA_MARKERS_429 = ("insufficient_quota",)
+_QUOTA_MARKERS_400 = ("credit balance", "insufficient_quota", "billing")
+
+
+def _has_marker(exc: Exception, markers: tuple[str, ...]) -> bool:
+    # Only used for classification: the text is never logged or returned.
+    text = str(exc).lower()
+    return any(marker in text for marker in markers)
+
+
+def map_exception(exc: Exception) -> LLMError:
+    """Map a LiteLLM / provider exception to `LLMError` (docs/05-rag-chat.md)."""
     if isinstance(exc, LLMError):
         return exc
-    if isinstance(exc, litellm.AuthenticationError | litellm.PermissionDeniedError):
+    litellm = _litellm()
+    code: LLMErrorCode
+    if isinstance(exc, litellm.AuthenticationError):
         code = "invalid_key"
+    elif isinstance(exc, litellm.PermissionDeniedError):
+        # 403 usually comes with a valid key: no access to the model, region, unverified org.
+        code = "access_denied"
     elif isinstance(exc, litellm.RateLimitError):
-        code = "rate_limited"
+        code = "quota_exceeded" if _has_marker(exc, _QUOTA_MARKERS_429) else "rate_limited"
     elif isinstance(exc, litellm.ContextWindowExceededError):
         code = "context_too_long"
+    elif isinstance(exc, litellm.PaymentRequiredError) or (
+        isinstance(exc, litellm.BadRequestError) and _has_marker(exc, _QUOTA_MARKERS_400)
+    ):
+        code = "quota_exceeded"
+    elif isinstance(
+        exc,
+        litellm.BadRequestError  # includes ContentPolicyViolationError
+        | litellm.NotFoundError
+        | litellm.UnprocessableEntityError
+        | litellm.UnsupportedParamsError,
+    ):
+        code = "request_rejected"
     else:
         code = "provider_error"
     return LLMError(code)
@@ -85,7 +116,7 @@ async def validate_key(*, provider: str, api_key: str) -> bool:
     if PLACEHOLDER_MARK in model:
         logger.warning("api key not checked: validation_model.%s is a placeholder", provider)
         return False
-    litellm = _litellm()
+    litellm = await _litellm_async()
     try:
         await litellm.acompletion(
             model=model,
@@ -111,7 +142,11 @@ async def stream_chat(*, model_id: str, api_key: str, messages: list[dict]) -> A
     spec = get_registry().get_enabled(model_id)
     if spec is None:
         raise ValueError(f"unknown or disabled model: {model_id}")
-    litellm = _litellm()
+    if PLACEHOLDER_MARK in spec.litellm_model:
+        # Not filled in models.yaml yet: do not send "<model-id>" to the provider.
+        logger.warning("llm chat not sent: models[%s].litellm_model is a placeholder", model_id)
+        raise LLMError("provider_error")
+    litellm = await _litellm_async()
     stream = None
     try:
         stream = await litellm.acompletion(
