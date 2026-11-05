@@ -69,6 +69,10 @@ event: citations  data: {"citations": [Citation], "uncited": false}
 event: error      data: {"code": "invalid_key", "message": "..."}
 event: done       data: {"refused": false}
 ```
+Thứ tự: `start → token* → citations → done`. Lỗi trước khi bắt đầu (`no_model`, `unknown_model`, `no_api_key`, `key_unreadable`) chỉ có một event `error`. Lỗi sau `start` (`retrieval_failed`, lỗi LLM, `save_failed` khi không lưu được câu trả lời) kết thúc bằng `error`, không có `done`. `citations` chỉ được gửi sau khi message assistant đã lưu xong. Hội thoại không tồn tại / của user khác → `404` JSON (trước khi stream).
+
+`Message`: `id, role, content, provider, model_id, citations, refused, error, created_at`. `GET /chat/conversations` trả `{items: [{id, title, created_at, updated_at}], total}`, 20 mục / trang.
+
 Dùng `sse-starlette`. Frontend dùng `fetch` + đọc stream (không dùng `EventSource`, vì cần POST và gửi cookie).
 
 ## Admin (`require_admin`)

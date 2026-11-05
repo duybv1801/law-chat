@@ -13,6 +13,7 @@ from qdrant_client import AsyncQdrantClient
 from sqlalchemy import text
 
 from app.auth.router import router as auth_router
+from app.chat.router import router as chat_router
 from app.core.csrf import CsrfHeaderMiddleware
 from app.core.errors import register_error_handlers
 from app.db.session import SessionLocal, engine
@@ -109,6 +110,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
 
 
 async def check_postgres() -> None:
