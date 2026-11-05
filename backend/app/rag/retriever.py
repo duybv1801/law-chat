@@ -64,6 +64,12 @@ class SourceBlock:
 
     document: LegalDocument
     chunks: list[LegalChunk]
+    # The best ranked chunk of the block (None: the first in text order).
+    best: LegalChunk | None = None
+
+    @property
+    def best_chunk(self) -> LegalChunk:
+        return self.best or self.chunks[0]
 
     @property
     def dieu(self) -> str | None:
@@ -166,12 +172,13 @@ def group_blocks(chunks: list[RetrievedChunk]) -> list[SourceBlock]:
     for item in chunks:
         chunk = item.chunk
         if chunk.dieu is None:
-            blocks.append(SourceBlock(chunk.document, [chunk]))
+            blocks.append(SourceBlock(chunk.document, [chunk], best=chunk))
             continue
         key = (chunk.document_id, chunk.dieu)
         block = by_dieu.get(key)
         if block is None:
-            block = by_dieu[key] = SourceBlock(chunk.document, [])
+            # `chunks` is ranked best first: the first chunk of a block is its best.
+            block = by_dieu[key] = SourceBlock(chunk.document, [], best=chunk)
             blocks.append(block)
         block.chunks.append(chunk)
     for block in blocks:
