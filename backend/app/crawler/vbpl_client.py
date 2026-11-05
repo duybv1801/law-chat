@@ -41,7 +41,7 @@ from app.crawler.vbpl_parser import (
     parse_sitemap_index,
     parse_status,
 )
-from app.ingest.schemas import Scope
+from app.ingest.schemas import Scope, Status
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,10 @@ class _Retryable(VbplHTTPError):
 
 class RobotsDisallowed(VbplError):
     pass
+
+
+class PageOutOfRange(ValueError):
+    """`list_documents` page beyond the sitemap files of the scope (their count changes)."""
 
 
 class RateLimiter:
@@ -114,12 +118,21 @@ def global_rate_limiter() -> RateLimiter:
 @dataclass(frozen=True)
 class ListFilters:
     scope: Scope = "trung_uong"
-    # Estimated from the URL slug (`guess_doc_type`); None = every type. Status and the
-    # real doc type are only known after fetching the detail page.
+    # Estimated from the URL slug (`guess_doc_type`); None = every type. Selects documents
+    # at listing time only: the real type is not checked after fetching the detail page
+    # (a document whose slug suggests another type is not reached, one whose slug matches
+    # is kept whatever its real type), so no detail page is fetched just to be dropped.
     doc_types: frozenset[str] | None = None
+    # Validity statuses to ingest; None = every status. Applied by the jobs after fetching
+    # the detail page, and only to documents not yet in the DB.
+    statuses: frozenset[Status] | None = None
 
     def accepts(self, ref: DocRef) -> bool:
         return self.doc_types is None or ref.doc_type_guess in self.doc_types
+
+    def accepts_document(self, doc: VbplDocument) -> bool:
+        """Check the status, known once the detail page is fetched (see `doc_types`)."""
+        return self.statuses is None or doc.status.status in self.statuses
 
 
 @dataclass(frozen=True)
@@ -298,7 +311,7 @@ class VbplClient:
     async def list_documents(self, *, page: int, filters: ListFilters) -> ListPage:
         files = await self.sitemaps(filters.scope)
         if not 1 <= page <= len(files):
-            raise ValueError(f"page {page} out of range 1..{len(files)}")
+            raise PageOutOfRange(f"page {page} out of range 1..{len(files)}")
         refs = await self._sitemap(files[page - 1])
         return ListPage(
             page=page, total_pages=len(files), items=[r for r in refs if filters.accepts(r)]
