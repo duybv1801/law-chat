@@ -172,9 +172,12 @@ async def ingest_upload(
     qdrant: AsyncQdrantClient,
     document_id: uuid.UUID,
     path: Path,
+    *,
+    force: bool = False,
 ) -> None:
-    """Background task: parse the stored file and index it. Never raises; failures end up
-    in `ingest_status=failed` + `ingest_error` (Vietnamese, shown to the user)."""
+    """Background task: parse the stored file and index it (`force`: even if already
+    indexed from the same text). Never raises; failures end up in `ingest_status=failed`
+    + `ingest_error` (Vietnamese, shown to the user)."""
     async with session_factory() as session:
         try:
             try:
@@ -188,7 +191,7 @@ async def ingest_upload(
             except ParseError as exc:
                 await _mark_failed(session, document_id, exc.user_message)
                 return
-            await indexer.reindex_document(session, qdrant, document_id, parsed.text)
+            await indexer.reindex_document(session, qdrant, document_id, parsed.text, force=force)
         except asyncio.CancelledError:
             # Shutdown / reload: the indexer marked it failed; put it back to `pending` so
             # `resume_interrupted_uploads` picks it up at the next start.

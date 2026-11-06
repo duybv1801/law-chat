@@ -250,6 +250,20 @@ async def advisory_lock(engine: AsyncEngine, job_type: JobType) -> AsyncIterator
                     logger.warning("Could not release the %s lock: %s", job_type, _describe(exc))
 
 
+async def is_job_running(session: AsyncSession, job_type: JobType) -> bool:
+    """True if some process holds the advisory lock of `job_type` (read from `pg_locks`,
+    without taking the lock). A two-key advisory lock shows as classid/objid, objsubid=2."""
+    held = await session.scalar(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted"
+            " AND classid = :cls AND objid = :job AND objsubid = 2"
+            " AND database = (SELECT oid FROM pg_database WHERE datname = current_database()))"
+        ),
+        {"cls": _LOCK_CLASS, "job": CRAWL_JOB_TYPES.index(job_type)},
+    )
+    return bool(held)
+
+
 async def _while_held(lock: HeldLock, work: Awaitable[None]) -> None:
     """Run `work`, checking the lock every `LOCK_CHECK_INTERVAL_S`; if the lock is lost,
     cancel `work` and raise `LockLost`."""
@@ -292,6 +306,7 @@ async def _run_job(
     params: dict[str, Any],
     body: Callable[[_Run], Awaitable[None]],
     prepare: Callable[[AsyncSession, _Run], Awaitable[None]] | None = None,
+    run_id: uuid.UUID | None = None,
 ) -> CrawlRunResult:
     async with advisory_lock(ctx.lock_engine, job_type) as lock:
         if lock is None:
@@ -303,7 +318,9 @@ async def _run_job(
             await _close_interrupted_runs(session, job_type)
             if prepare is not None:
                 await prepare(session, run)
-            row = CrawlRun(job_type=job_type, status="running", params=run.params)
+            row = CrawlRun(
+                id=run_id or uuid.uuid4(), job_type=job_type, status="running", params=run.params
+            )
             session.add(row)
             await session.commit()
             run.id = row.id
@@ -495,6 +512,7 @@ async def run_backfill(
     resume: bool = True,
     *,
     ctx: JobContext | None = None,
+    run_id: uuid.UUID | None = None,
 ) -> CrawlRunResult:
     """Walk every sitemap file of the scope, one doc type group at a time (priority order),
     and ingest the documents that pass `filters` (default: central, in force).
@@ -572,7 +590,9 @@ async def run_backfill(
                 page = next_page
         run.params["checkpoint"] = None  # whole scope done
 
-    return await _with_context(ctx, lambda c: _run_job(c, "backfill", params, body, prepare))
+    return await _with_context(
+        ctx, lambda c: _run_job(c, "backfill", params, body, prepare, run_id)
+    )
 
 
 # --- daily_new --------------------------------------------------------------------------
@@ -593,7 +613,11 @@ async def daily_since(session: AsyncSession, overlap_days: int) -> date:
 
 
 async def run_daily_new(
-    overlap_days: int = 7, *, scope: Scope = "trung_uong", ctx: JobContext | None = None
+    overlap_days: int = 7,
+    *,
+    scope: Scope = "trung_uong",
+    ctx: JobContext | None = None,
+    run_id: uuid.UUID | None = None,
 ) -> CrawlRunResult:
     """Documents of the scope whose sitemap `lastmod` is on or after `daily_since`: new ones
     are ingested if in force; known ones are re-checked (text, metadata, validity)."""
@@ -615,7 +639,9 @@ async def run_daily_new(
             await run.guarded(ref.source_id, lambda ref=ref: _sync_document(run, ref, filters))
         run.params["listed"] = len(seen)
 
-    return await _with_context(ctx, lambda c: _run_job(c, "daily_new", params, body, prepare))
+    return await _with_context(
+        ctx, lambda c: _run_job(c, "daily_new", params, body, prepare, run_id)
+    )
 
 
 # --- status_refresh ---------------------------------------------------------------------
@@ -693,7 +719,7 @@ async def _refresh_one(run: _Run, document: dict[str, Any]) -> None:
 
 
 async def run_status_refresh(
-    batch_size: int = 500, *, ctx: JobContext | None = None
+    batch_size: int = 500, *, ctx: JobContext | None = None, run_id: uuid.UUID | None = None
 ) -> CrawlRunResult:
     """Re-read the validity of `batch_size` vbpl documents and copy changes to Qdrant."""
     if batch_size < 1:
@@ -709,7 +735,9 @@ async def run_status_refresh(
         for document in batch:
             await run.guarded(document["source_id"], lambda d=document: _refresh_one(run, d))
 
-    return await _with_context(ctx, lambda c: _run_job(c, "status_refresh", params, body))
+    return await _with_context(
+        ctx, lambda c: _run_job(c, "status_refresh", params, body, run_id=run_id)
+    )
 
 
 # --- Default context --------------------------------------------------------------------

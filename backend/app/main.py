@@ -12,10 +12,12 @@ from fastapi import FastAPI, Request, Response, status
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy import text
 
+from app.admin.router import router as admin_router
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.core.csrf import CsrfHeaderMiddleware
 from app.core.errors import register_error_handlers
+from app.crawler.jobs import default_context
 from app.db.session import SessionLocal, engine
 from app.documents.router import router as documents_router
 from app.documents.service import resume_interrupted_uploads
@@ -28,6 +30,7 @@ from app.ingest.indexer import (
     sync_pending_payloads,
 )
 from app.llm.registry import get_registry
+from app.scheduler import JobRunner, start_scheduler
 from app.settings.router import models_router
 from app.settings.router import router as settings_router
 
@@ -63,6 +66,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_registry()  # fail fast on a broken config/models.yaml (raises RegistryError)
     qdrant: AsyncQdrantClient | None = None
     tasks: list[asyncio.Task[None]] = []
+    runner: JobRunner | None = None
+    scheduler = None
     try:
         # Both may download once; load them in parallel, off the event loop.
         tokenizer, embedder = await asyncio.gather(
@@ -92,8 +97,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.warning("Could not check the Qdrant collection: %s", type(exc).__name__)
         tasks.append(asyncio.create_task(payload_sync_loop(qdrant)))
         tasks.append(asyncio.create_task(resume_uploads(qdrant)))
+        app_qdrant = qdrant
+        runner = app.state.job_runner = JobRunner(lambda: default_context(app_qdrant))
+        if settings.scheduler_enabled:
+            # One machine only (docs/08-dev-machines.md); the job lock prevents overlaps.
+            scheduler = start_scheduler(runner)
         yield
     finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+        if runner is not None:
+            await runner.shutdown()  # running jobs record themselves as interrupted
         for task in tasks:
             task.cancel()
             with suppress(asyncio.CancelledError):
@@ -111,6 +125,7 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 async def check_postgres() -> None:
