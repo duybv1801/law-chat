@@ -419,12 +419,14 @@ async def index_document(
     *,
     owner_id: uuid.UUID | None = None,
     embedder: Embedder | None = None,
+    force: bool = False,
 ) -> uuid.UUID:
     """Create or update a document from its metadata and normalized text; return its id.
 
     A document with the same (`source`, `source_id`) is updated in place: if it is already
     indexed from the same text, title and số hiệu with the current model only its metadata
-    changes. Uploads (`source_id=None`) always create a new document.
+    changes, unless `force` (admin re-index). Uploads (`source_id=None`) always create a
+    new document.
     """
     embedder = embedder or get_embedder()
     text_hash = content_hash(text)
@@ -439,6 +441,7 @@ async def index_document(
         )
     if (
         existing is not None
+        and not force
         and _is_current(existing, text_hash, embedder)
         and all(getattr(existing, c) == metadata[c] for c in EMBEDDED_COLUMNS)
     ):
@@ -464,15 +467,17 @@ async def reindex_document(
     text: str,
     *,
     embedder: Embedder | None = None,
+    force: bool = False,
 ) -> None:
     """(Re)build chunks and points of an existing document, e.g. an upload created as
-    `pending`. No-op if it is already indexed from the same text with the current model."""
+    `pending`. No-op if it is already indexed from the same text with the current model,
+    unless `force` (admin re-index, e.g. after a chunker change)."""
     embedder = embedder or get_embedder()
     doc = await session.get(LegalDocument, document_id)
     if doc is None:
         raise LookupError(f"document {document_id} not found")
     text_hash = content_hash(text)
-    if _is_current(doc, text_hash, embedder):
+    if not force and _is_current(doc, text_hash, embedder):
         return
     await _index(session, qdrant, doc, text, text_hash, embedder)
 

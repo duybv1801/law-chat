@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     crawler_cache: bool = False
     crawler_cache_dir: Path = Path("storage/crawl_cache")
     scheduler_enabled: bool = False
+    # Standard 5-field crontab, in TZ_APP. Set `* * * * *` to check the scheduler quickly.
+    scheduler_daily_new_cron: str = "0 2 * * *"
+    scheduler_status_refresh_cron: str = "0 3 * * *"
+    scheduler_status_refresh_batch_size: int = Field(default=500, gt=0)
     tz_app: str = "Asia/Ho_Chi_Minh"
 
     @field_validator("app_encryption_keys", mode="before")
@@ -83,6 +87,14 @@ class Settings(BaseSettings):
         if value is None or value.is_absolute():
             return value
         return BACKEND_DIR / value
+
+    @field_validator("scheduler_daily_new_cron", "scheduler_status_refresh_cron")
+    @classmethod
+    def _check_cron(cls, value: str) -> str:
+        from apscheduler.triggers.cron import CronTrigger
+
+        CronTrigger.from_crontab(value)  # ValueError on a bad expression
+        return value
 
     @field_validator("tz_app")
     @classmethod
