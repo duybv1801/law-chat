@@ -254,3 +254,21 @@ async def test_reindex_errors(api, db_session, qdrant) -> None:
     await db_session.commit()
     busy = await api.post(f"/api/admin/documents/{document_id}/reindex")
     assert (busy.status_code, busy.json()["error"]["code"]) == (409, "ingest_in_progress")
+
+
+def test_admin_constants_match_frontend() -> None:
+    """The Admin page mirrors these values; keep frontend api/admin.ts, lib/admin.ts in sync."""
+    from dataclasses import fields
+
+    from app.admin.router import PAGE_SIZE_MAX
+    from app.crawler.jobs import CrawlStats
+    from app.db.models import CRAWL_JOB_TYPES, CRAWL_RUN_STATUSES
+    from tests.frontend_sync import read_ts_source, ts_int_const, ts_str_list, ts_str_record
+
+    api_source = read_ts_source("api/admin.ts")
+    assert ts_str_list(api_source, "CRAWL_JOB_TYPES") == list(CRAWL_JOB_TYPES)
+    assert ts_str_list(api_source, "CRAWL_RUN_STATUSES") == list(CRAWL_RUN_STATUSES)
+    assert ts_int_const(api_source, "PAGE_SIZE_MAX") == PAGE_SIZE_MAX
+    lib_source = read_ts_source("lib/admin.ts")
+    labels = ts_str_record(lib_source, "CRAWL_STAT_LABELS")
+    assert list(labels) == [f.name for f in fields(CrawlStats)]
