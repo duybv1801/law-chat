@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from app.core.config import settings
 from app.crawler.jobs import (
     IN_FORCE_STATUSES,
+    BackfillOrder,
     CrawlRunResult,
     JobContext,
     JobType,
@@ -54,6 +55,7 @@ class BackfillParams(_Params):
     ) = Field(default=None, max_length=50)
     all_statuses: bool = False
     resume: bool = True
+    order: BackfillOrder = "priority"
 
 
 class DailyNewParams(_Params):
@@ -87,7 +89,9 @@ async def run_job(
                 doc_types=frozenset(params.doc_types) if params.doc_types else None,
                 statuses=None if params.all_statuses else IN_FORCE_STATUSES,
             )
-            return await run_backfill(params.limit, filters, params.resume, ctx=ctx, run_id=run_id)
+            return await run_backfill(
+                params.limit, filters, params.resume, params.order, ctx=ctx, run_id=run_id
+            )
         case DailyNewParams():
             return await run_daily_new(params.overlap_days, ctx=ctx, run_id=run_id)
         case StatusRefreshParams():

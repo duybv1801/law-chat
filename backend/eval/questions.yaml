@@ -1,0 +1,126 @@
+# Retrieval eval set (T25). Owner reviews and edits this list.
+#
+# Questions are written for the documents indexed at the time (4 codes crawled from vbpl.vn:
+# BLHS 100/2015/QH13, BLTTHS 101/2015/QH13, BLTTDS 92/2015/QH13, Bộ luật Hàng hải 95/2015/QH13).
+# Hiến pháp 2013 is indexed without Điều (window chunks, no số hiệu) so it is not used here.
+#
+# in_scope:   `expected` lists the acceptable (so_hieu, dieu); a question is a hit at k when
+#             ANY of them is among the first k source blocks returned by the retriever.
+# out_of_scope: nothing in the database answers it; the expected behaviour is a refusal
+#             (best dense score below RAG_MIN_SCORE).
+#
+# Most questions are phrased like a user would ask (no số hiệu); a few mention the số hiệu
+# to exercise the số hiệu filter.
+
+in_scope:
+  # --- Bộ luật Hình sự 100/2015/QH13 ---
+  - id: hs-01
+    question: Người bao nhiêu tuổi thì phải chịu trách nhiệm hình sự?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 12}]
+  - id: hs-02
+    question: Trộm cắp tài sản trị giá bao nhiêu tiền thì bị truy cứu trách nhiệm hình sự?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 173}]
+  - id: hs-03
+    question: Lừa đảo chiếm đoạt tài sản bị phạt tù bao nhiêu năm?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 174}]
+  - id: hs-04
+    question: Những tình tiết nào được coi là giảm nhẹ trách nhiệm hình sự?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 51}]
+  - id: hs-05
+    question: Phạm tội có tính chất côn đồ, tái phạm nguy hiểm có phải là tình tiết tăng nặng không?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 52}]
+  - id: hs-06
+    question: Điều kiện để được hưởng án treo là gì?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 65}]
+  - id: hs-07
+    question: Cố ý gây thương tích cho người khác với tỷ lệ tổn thương cơ thể 11% thì bị xử lý thế nào?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 134}]
+  - id: hs-08
+    question: Đánh bạc trái phép bằng tiền với số tiền bao nhiêu thì bị truy cứu trách nhiệm hình sự?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 321}]
+  - id: hs-09
+    question: Công chức nhận hối lộ từ 2 triệu đồng bị phạt thế nào theo Bộ luật Hình sự 100/2015/QH13?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 354}]
+  - id: hs-10
+    question: Khác nhau giữa tội cướp tài sản và tội cướp giật tài sản là gì?
+    expected:
+      - {so_hieu: 100/2015/QH13, dieu: Điều 168}
+      - {so_hieu: 100/2015/QH13, dieu: Điều 171}
+  - id: hs-11
+    question: Gây tai nạn giao thông làm chết người khi lái xe thì bị phạt tù bao lâu?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 260}]
+  - id: hs-12
+    question: Tàng trữ trái phép chất ma túy bị xử lý hình sự như thế nào?
+    expected: [{so_hieu: 100/2015/QH13, dieu: Điều 249}]
+
+  # --- Bộ luật Tố tụng hình sự 101/2015/QH13 ---
+  - id: tths-01
+    question: Nguyên tắc suy đoán vô tội được quy định thế nào?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 13}]
+  - id: tths-02
+    question: Thời hạn tạm giam để điều tra tội phạm nghiêm trọng là bao lâu?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 173}]
+  - id: tths-03
+    question: Những trường hợp nào được bắt người phạm tội quả tang?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 111}]
+  - id: tths-04
+    question: Thời hạn kháng cáo bản án hình sự sơ thẩm là bao nhiêu ngày?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 333}]
+  - id: tths-05
+    question: Cơ quan điều tra phải giải quyết tố giác, tin báo về tội phạm trong thời hạn bao lâu?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 147}]
+  - id: tths-06
+    question: Ai có quyền kháng cáo bản án sơ thẩm trong vụ án hình sự?
+    expected: [{so_hieu: 101/2015/QH13, dieu: Điều 331}]
+
+  # --- Bộ luật Tố tụng dân sự 92/2015/QH13 ---
+  - id: tthd-01
+    question: Thời hạn kháng cáo bản án dân sự sơ thẩm là bao lâu?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 273}]
+  - id: tthd-02
+    question: Tòa án nhân dân cấp huyện có thẩm quyền giải quyết những vụ việc dân sự nào?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 35}]
+  - id: tthd-03
+    question: Khi nào Tòa án trả lại đơn khởi kiện?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 192}]
+  - id: tthd-04
+    question: Có những cách nào để gửi đơn khởi kiện đến Tòa án?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 190}]
+  - id: tthd-05
+    question: Những tình tiết, sự kiện nào trong vụ án dân sự không phải chứng minh?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 92}]
+  - id: tthd-06
+    question: Ai phải chịu án phí dân sự sơ thẩm?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 147}]
+  - id: tthd-07
+    question: Những trường hợp nào không được làm người đại diện trong tố tụng dân sự theo Bộ luật 92/2015/QH13?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 87}]
+  - id: tthd-08
+    question: Tòa án tạm đình chỉ giải quyết vụ án dân sự trong những trường hợp nào?
+    expected: [{so_hieu: 92/2015/QH13, dieu: Điều 214}]
+
+  # --- Bộ luật Hàng hải 95/2015/QH13 ---
+  - id: hh-01
+    question: Những loại tàu biển nào phải đăng ký?
+    expected: [{so_hieu: 95/2015/QH13, dieu: Điều 19}]
+  - id: hh-02
+    question: Thuyền trưởng có địa vị pháp lý như thế nào trên tàu biển?
+    expected: [{so_hieu: 95/2015/QH13, dieu: Điều 52}]
+  - id: hh-03
+    question: Thời hiệu khởi kiện về hư hỏng, mất mát hàng hóa vận chuyển bằng đường biển là bao lâu?
+    expected: [{so_hieu: 95/2015/QH13, dieu: Điều 169}]
+  - id: hh-04
+    question: Khi hai tàu đâm va nhau thì lỗi và bồi thường được xác định theo nguyên tắc nào?
+    expected: [{so_hieu: 95/2015/QH13, dieu: Điều 287}]
+
+out_of_scope:
+  - id: oos-01
+    question: Lao động nữ được nghỉ thai sản bao nhiêu tháng?
+  - id: oos-02
+    question: Thu nhập bao nhiêu thì phải đóng thuế thu nhập cá nhân?
+  - id: oos-03
+    question: Thủ tục cấp giấy chứng nhận quyền sử dụng đất lần đầu gồm những gì?
+  - id: oos-04
+    question: Cách nấu phở bò Hà Nội ngon?
+  - id: oos-05
+    question: Thành lập công ty trách nhiệm hữu hạn hai thành viên cần vốn điều lệ tối thiểu bao nhiêu?

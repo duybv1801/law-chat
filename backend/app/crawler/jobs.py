@@ -63,6 +63,13 @@ BACKFILL_DOC_TYPE_PRIORITY: tuple[str, ...] = (
 )
 OTHER_TYPES = "*"  # checkpoint name of the group "every type not in the priority list"
 
+# Backfill order: `priority` = by doc type group (above), newest `lastmod` first inside a
+# group; `newest` = sitemap order only (newest `lastmod` first, every type mixed), for
+# small manual runs that should bring the latest documents first. The sitemap has no
+# issue date, so "newest" means last updated on vbpl.vn.
+BackfillOrder = Literal["priority", "newest"]
+NEWEST_GROUP = "newest"  # checkpoint name of the single group of the `newest` order
+
 # "Còn hiệu lực" for ingesting new documents: in force, partly in force, or not yet in force.
 IN_FORCE_STATUSES: frozenset[Status] = frozenset(
     {"con_hieu_luc", "het_hieu_luc_mot_phan", "chua_co_hieu_luc"}
@@ -445,16 +452,21 @@ def _is_unchanged(existing: LegalDocument, new: LegalDocumentIn, text: str, mode
 # --- backfill ---------------------------------------------------------------------------
 
 
-def backfill_groups(filters: ListFilters) -> list[str]:
-    """Doc type groups in backfill order; `OTHER_TYPES` = every type not listed before."""
+def backfill_groups(filters: ListFilters, order: BackfillOrder = "priority") -> list[str]:
+    """Doc type groups in backfill order; `OTHER_TYPES` = every type not listed before.
+    The `newest` order has one group (`NEWEST_GROUP`) holding every listed document."""
+    if order == "newest":
+        return [NEWEST_GROUP]
     if filters.doc_types is None:
         return [*BACKFILL_DOC_TYPE_PRIORITY, OTHER_TYPES]
     first = [t for t in BACKFILL_DOC_TYPE_PRIORITY if t in filters.doc_types]
     return first + sorted(filters.doc_types - set(first))
 
 
-def _group_of(ref: DocRef, groups: list[str]) -> str | None:
+def _group_of(ref: DocRef, groups: list[str], filters: ListFilters) -> str | None:
     """Backfill group of a ref (by its slug guess), or None if no group takes it."""
+    if groups == [NEWEST_GROUP]:
+        return NEWEST_GROUP if filters.accepts(ref) else None
     guess = ref.doc_type_guess
     if guess in groups:
         return guess
@@ -486,8 +498,11 @@ def _filters_params(filters: ListFilters) -> dict[str, Any]:
     }
 
 
-async def _find_checkpoint(session: AsyncSession, filters: dict[str, Any]) -> dict[str, Any] | None:
-    """Checkpoint of the latest backfill if it was interrupted / failed with the same filters.
+async def _find_checkpoint(
+    session: AsyncSession, filters: dict[str, Any], order: BackfillOrder = "priority"
+) -> dict[str, Any] | None:
+    """Checkpoint of the latest backfill if it was interrupted / failed with the same filters
+    and order (runs from before `order` existed used `priority`).
 
     A run that ended normally (also one stopped by `limit`) is not resumed: running the
     same command again re-checks the same documents.
@@ -500,8 +515,11 @@ async def _find_checkpoint(session: AsyncSession, filters: dict[str, Any]) -> di
     )
     if last is None or last.status != "failed":
         return None
-    checkpoint = (last.params or {}).get("checkpoint")
-    if not checkpoint or (last.params or {}).get("filters") != filters:
+    last_params = last.params or {}
+    checkpoint = last_params.get("checkpoint")
+    if not checkpoint or last_params.get("filters") != filters:
+        return None
+    if last_params.get("order", "priority") != order:
         return None
     return dict(checkpoint)
 
@@ -510,12 +528,14 @@ async def run_backfill(
     limit: int | None = None,
     filters: ListFilters | None = None,
     resume: bool = True,
+    order: BackfillOrder = "priority",
     *,
     ctx: JobContext | None = None,
     run_id: uuid.UUID | None = None,
 ) -> CrawlRunResult:
     """Walk every sitemap file of the scope, one doc type group at a time (priority order),
-    and ingest the documents that pass `filters` (default: central, in force).
+    and ingest the documents that pass `filters` (default: central, in force). With
+    `order="newest"`, walk the sitemaps once in their own order (latest `lastmod` first).
 
     `limit` caps the documents stored by this run (created, updated or unchanged);
     documents filtered out or missing do not count. With `resume`, a run continues from the
@@ -526,17 +546,22 @@ async def run_backfill(
     filters = filters or DEFAULT_FILTERS
     if limit is not None and limit < 1:
         raise ValueError("limit must be >= 1")
-    params: dict[str, Any] = {"limit": limit, "resume": resume, "filters": _filters_params(filters)}
+    params: dict[str, Any] = {
+        "limit": limit,
+        "resume": resume,
+        "order": order,
+        "filters": _filters_params(filters),
+    }
 
     async def prepare(session: AsyncSession, run: _Run) -> None:
         if resume:
-            checkpoint = await _find_checkpoint(session, run.params["filters"])
+            checkpoint = await _find_checkpoint(session, run.params["filters"], order)
             if checkpoint:
                 run.params["resumed_from"] = checkpoint
                 run.params["checkpoint"] = checkpoint
 
     async def body(run: _Run) -> None:
-        groups = backfill_groups(filters)
+        groups = backfill_groups(filters, order)
         start = run.params.get("checkpoint") or {}
         if start.get("group") not in groups:
             start = {}
@@ -551,7 +576,7 @@ async def run_backfill(
                 listed = await run.ctx.client.list_documents(page=page, filters=listing)
                 split: dict[str, list[DocRef]] = {g: [] for g in groups}
                 for ref in listed.items:
-                    ref_group = _group_of(ref, groups)
+                    ref_group = _group_of(ref, groups, filters)
                     if ref_group is not None:
                         split[ref_group].append(ref)
                 pages[page] = (split, listed.next_page)
