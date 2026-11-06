@@ -136,6 +136,7 @@ function JobCard({ jobType, lastRun, onStarted }: {
   const start = useStartCrawl()
   const [limitText, setLimitText] = useState('')
   const [limitError, setLimitError] = useState<string | null>(null)
+  const [newestFirst, setNewestFirst] = useState(true)
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -147,7 +148,8 @@ function JobCard({ jobType, lastRun, onStarted }: {
         setLimitError(parsed.error)
         return
       }
-      if (parsed.limit !== undefined) params = { limit: parsed.limit }
+      params = { order: newestFirst ? 'newest' : 'priority' }
+      if (parsed.limit !== undefined) params.limit = parsed.limit
     }
     setLimitError(null)
     start.mutate(
@@ -196,6 +198,20 @@ function JobCard({ jobType, lastRun, onStarted }: {
             className={`${inputClass} sm:max-w-48`}
           />
           {limitError && <ErrorText>{limitError}</ErrorText>}
+          <label className="mt-2 flex items-start gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={newestFirst}
+              onChange={(e) => setNewestFirst(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Ưu tiên văn bản mới cập nhật nhất
+              <span className="block text-xs text-slate-500">
+                Bỏ chọn để chạy theo loại văn bản (Hiến pháp, Bộ luật, Luật, Nghị định…).
+              </span>
+            </span>
+          </label>
         </div>
       )}
       <div className="mt-auto flex flex-wrap items-center gap-3">

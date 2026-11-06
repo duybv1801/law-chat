@@ -1,6 +1,6 @@
 """Crawler CLI (`uv run python -m app.crawler.cli --help`):
 
-backfill [--limit N] [--doc-type "Luật"]... [--all-statuses] [--no-resume]
+backfill [--limit N] [--doc-type "Luật"]... [--all-statuses] [--no-resume] [--newest]
 daily [--overlap-days 7]
 status-refresh [--batch-size 500]
 fetch-one <source_id | url> [--dry-run]
@@ -151,13 +151,17 @@ def backfill(
     resume: bool = typer.Option(
         True, "--resume/--no-resume", help="Continue an interrupted backfill"
     ),
+    newest: bool = typer.Option(
+        False, "--newest", help="Latest updated documents first, every doc type mixed"
+    ),
 ) -> None:
-    """Ingest central documents from the sitemaps, by doc type priority."""
+    """Ingest central documents from the sitemaps, by doc type priority (or newest first)."""
     filters = ListFilters(
         doc_types=frozenset(doc_type) if doc_type else None,
         statuses=None if all_statuses else IN_FORCE_STATUSES,
     )
-    _run(lambda: run_backfill(limit, filters, resume))
+    order = "newest" if newest else "priority"
+    _run(lambda: run_backfill(limit, filters, resume, order))
 
 
 @cli.command()

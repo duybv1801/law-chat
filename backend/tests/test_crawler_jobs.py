@@ -156,14 +156,19 @@ def test_backfill_groups_follow_priority() -> None:
 
 
 def test_other_group_takes_unlisted_types() -> None:
-    every = backfill_groups(ListFilters())
-    assert jobs._group_of(ref("chi-thi-a--1"), every) == OTHER_TYPES
-    assert jobs._group_of(ref("khong-ro--2"), every) == OTHER_TYPES
-    assert jobs._group_of(ref("luat-a--3"), every) == "Luật"
-    assert jobs._group_of(ref("bo-luat-a--4"), every) == "Bộ luật"
-    only = backfill_groups(ListFilters(doc_types=frozenset({"Luật", "Chỉ thị"})))
-    assert jobs._group_of(ref("chi-thi-a--1"), only) == "Chỉ thị"
-    assert jobs._group_of(ref("thong-tu-a--5"), only) is None
+    all_types = ListFilters()
+    every = backfill_groups(all_types)
+    assert jobs._group_of(ref("chi-thi-a--1"), every, all_types) == OTHER_TYPES
+    assert jobs._group_of(ref("khong-ro--2"), every, all_types) == OTHER_TYPES
+    assert jobs._group_of(ref("luat-a--3"), every, all_types) == "Luật"
+    assert jobs._group_of(ref("bo-luat-a--4"), every, all_types) == "Bộ luật"
+    some = ListFilters(doc_types=frozenset({"Luật", "Chỉ thị"}))
+    only = backfill_groups(some)
+    assert jobs._group_of(ref("chi-thi-a--1"), only, some) == "Chỉ thị"
+    assert jobs._group_of(ref("thong-tu-a--5"), only, some) is None
+    newest = backfill_groups(some, "newest")
+    assert jobs._group_of(ref("chi-thi-a--1"), newest, some) == "newest"
+    assert jobs._group_of(ref("thong-tu-a--5"), newest, some) is None
 
 
 def test_resume_index_follows_source_id() -> None:
@@ -348,6 +353,28 @@ async def test_backfill_limit_counts_stored_documents(make_ctx, db_session) -> N
     result = await run_backfill(limit=2, ctx=make_ctx(again))
     assert again.fetched == ["5", "1"]
     assert result.stats.unchanged == 2
+
+
+async def test_backfill_newest_follows_sitemap_order(make_ctx, db_session) -> None:
+    site = sample_site()
+    result = await run_backfill(limit=2, order="newest", ctx=make_ctx(site))
+    # Sitemap order (latest `lastmod` first), doc types mixed; filtered ones do not count.
+    assert site.fetched == ["1", "2", "3", "vbpqta_4", "5"]
+    assert result.stats.created == 2
+    recorded = (await runs(db_session, "backfill"))[0]
+    assert recorded.params["order"] == "newest"
+    assert recorded.params["checkpoint"]["group"] == "newest"
+
+
+async def test_backfill_newest_keeps_doc_type_filter(make_ctx, db_session) -> None:
+    site = sample_site()
+    only = ListFilters(doc_types=frozenset({"Hiến pháp", "Thông tư"}), statuses=None)
+    await run_backfill(filters=only, order="newest", ctx=make_ctx(site))
+    assert site.fetched == ["3", "5"]
+
+
+def test_backfill_groups_newest_is_one_group() -> None:
+    assert backfill_groups(ListFilters(), "newest") == ["newest"]
 
 
 async def test_backfill_resumes_after_failure(make_ctx, db_session, monkeypatch) -> None:
