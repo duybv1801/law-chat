@@ -72,6 +72,10 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "SIM"]
 
 # FastAPI dependency markers are meant to be used as default arguments (B008).
+# Notebooks set environment variables before importing `app` (settings read them at import).
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*.ipynb" = ["E402"]
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "fastapi.Depends",

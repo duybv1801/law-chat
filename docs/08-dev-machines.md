@@ -92,6 +92,19 @@ Chuyển file giữa hai máy bằng cách nào cũng được (rsync, scp, ổ 
 
 **Không làm** chiều ngược lại hoặc trộn hai chiều. Nếu Linux có crawl thử, lần import tiếp theo sẽ ghi đè phần `vbpl`. Chấp nhận được.
 
+## 4b. Bộ dữ liệu dựng sẵn (seed bundle, Colab)
+
+Backfill khối lượng lớn để đóng gói cho người dùng chạy trên Google Colab: `backend/notebooks/seed_colab.ipynb`
+(hướng dẫn trong notebook). Kết quả trên Drive (`MyDrive/law-chatbot-seed/latest/`) là `law.dump` (pg_dump) +
+`legal_chunks.snapshot` (Qdrant) + `manifest.json`. Import vào máy dev / máy người dùng:
+
+```bash
+docker compose up -d
+cd backend
+uv run python -m app.seed.cli restore --from /path/to/latest            # DB + collection của .env, phải trống
+uv run python -m app.seed.cli restore --from ... --database law_seed --collection legal_chunks_seed
+```
+
 ## 5. Scheduler và crawl
 
 - Chỉ máy Mac đặt `SCHEDULER_ENABLED=true`. Linux đặt `false`.
